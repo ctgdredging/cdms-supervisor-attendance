@@ -23,6 +23,9 @@ import {
   Sparkles,
   Unlock,
   KeyRound,
+  Eye,
+  EyeOff,
+  X,
 } from 'lucide-react';
 import {
   Supervisor,
@@ -57,6 +60,8 @@ interface DailyAttendanceFormProps {
   loggedInSupervisor?: Supervisor | null;
   onOpenSupervisorLogin?: () => void;
   onLogoutSupervisor?: () => void;
+  onSupervisorLogin?: (supervisor: Supervisor) => void;
+  onUpdateSupervisorPassword?: (supervisorId: string, newPassword: string) => Promise<void> | void;
 }
 
 export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
@@ -74,6 +79,8 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
   loggedInSupervisor = null,
   onOpenSupervisorLogin,
   onLogoutSupervisor,
+  onSupervisorLogin,
+  onUpdateSupervisorPassword,
 }) => {
   const [entries, setEntries] = useState<Record<string, AttendanceEntry>>({});
   const [selectedSupervisorSubmitterId, setSelectedSupervisorSubmitterId] = useState<string>('');
@@ -99,10 +106,28 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
 
   // Mode: Office Authority or Supervisor Submitter
   const [roleMode, setRoleMode] = useState<'office' | 'supervisor'>(
-    isOfficeAuthenticated ? 'office' : loggedInSupervisor ? 'supervisor' : 'office'
+    isOfficeAuthenticated ? 'office' : loggedInSupervisor ? 'supervisor' : 'supervisor'
   );
   const [inlinePin, setInlinePin] = useState<string>('');
   const [inlinePinError, setInlinePinError] = useState<string>('');
+
+  // Inline supervisor login state
+  const [inlineSupervisorPassword, setInlineSupervisorPassword] = useState<string>('');
+  const [inlineSupervisorNewPassword, setInlineSupervisorNewPassword] = useState<string>('');
+  const [inlineSupervisorConfirmPassword, setInlineSupervisorConfirmPassword] = useState<string>('');
+  const [showInlinePassword, setShowInlinePassword] = useState<boolean>(false);
+  const [inlineSupervisorError, setInlineSupervisorError] = useState<string>('');
+  const [inlineSupervisorSuccess, setInlineSupervisorSuccess] = useState<string>('');
+
+  // Submit Password Verification Modal state
+  const [showSubmitPasswordModal, setShowSubmitPasswordModal] = useState<boolean>(false);
+  const [modalSupervisorId, setModalSupervisorId] = useState<string>('');
+  const [modalPassword, setModalPassword] = useState<string>('');
+  const [modalNewPassword, setModalNewPassword] = useState<string>('');
+  const [modalConfirmPassword, setModalConfirmPassword] = useState<string>('');
+  const [showModalPassword, setShowModalPassword] = useState<boolean>(false);
+  const [modalError, setModalError] = useState<string>('');
+  const [isModalSubmitting, setIsModalSubmitting] = useState<boolean>(false);
 
   // Shift & Rotation information for selectedDate
   const shiftInfo = getShiftInfoForDate(selectedDate);
@@ -188,11 +213,71 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
   // When supervisor is selected from dropdown, autofill name and phone
   const handleSelectSupervisorDropdown = (supId: string) => {
     setSelectedSupervisorSubmitterId(supId);
+    setInlineSupervisorPassword('');
+    setInlineSupervisorNewPassword('');
+    setInlineSupervisorConfirmPassword('');
+    setInlineSupervisorError('');
+    setInlineSupervisorSuccess('');
     if (!supId) return;
     const matched = supervisors.find((s) => s.id === supId);
     if (matched) {
       setSubmittedBy(matched.name);
       setSupervisorPhone(matched.phone);
+    }
+  };
+
+  // Inline Supervisor Login and password validation
+  const handleInlineSupervisorLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setInlineSupervisorError('');
+    setInlineSupervisorSuccess('');
+
+    const targetSup = supervisors.find((s) => s.id === selectedSupervisorSubmitterId);
+    if (!targetSup) {
+      setInlineSupervisorError('⚠️ দয়া করে আগে তালিকা থেকে আপনার নাম নির্বাচন করুন।');
+      return;
+    }
+
+    // Case 1: First-time password set
+    if (!targetSup.password || targetSup.password.trim() === '') {
+      if (!inlineSupervisorNewPassword.trim()) {
+        setInlineSupervisorError('⚠️ দয়া করে একটি নতুন পাসওয়ার্ড লিখুন।');
+        return;
+      }
+      if (inlineSupervisorNewPassword.trim().length < 4) {
+        setInlineSupervisorError('⚠️ পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে।');
+        return;
+      }
+      if (inlineSupervisorNewPassword !== inlineSupervisorConfirmPassword) {
+        setInlineSupervisorError('⚠️ নতুন পাসওয়ার্ড এবং নিশ্চিতকরণ পাসওয়ার্ড মিলছে না!');
+        return;
+      }
+
+      if (onUpdateSupervisorPassword) {
+        await onUpdateSupervisorPassword(targetSup.id, inlineSupervisorNewPassword.trim());
+      }
+      const updatedSup = { ...targetSup, password: inlineSupervisorNewPassword.trim(), passwordSet: true };
+      if (onSupervisorLogin) {
+        onSupervisorLogin(updatedSup);
+      }
+      setInlineSupervisorSuccess('পাসওয়ার্ড সফলভাবে সংরক্ষিত এবং লগইন হয়েছে!');
+      return;
+    }
+
+    // Case 2: Existing password verify
+    if (!inlineSupervisorPassword.trim()) {
+      setInlineSupervisorError('⚠️ দয়া করে আপনার পাসওয়ার্ড লিখুন।');
+      return;
+    }
+
+    if (inlineSupervisorPassword.trim() === targetSup.password.trim()) {
+      if (onSupervisorLogin) {
+        onSupervisorLogin(targetSup);
+      }
+      setInlineSupervisorSuccess('সফলভাবে লগইন হয়েছে!');
+      setInlineSupervisorPassword('');
+    } else {
+      setInlineSupervisorError('❌ ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন।');
     }
   };
 
@@ -333,39 +418,10 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
     return true;
   };
 
-  // 1. Action: Supervisor Submits for Approval (Strict Login Enforced)
-  const handleSupervisorSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormValidationError('');
-
-    // Strict authentication check: Must be logged in as Supervisor or Office
-    if (!loggedInSupervisor && !isOfficeAuthenticated) {
-      setFormValidationError('🔒 হাজিরা জমা দিতে লগইন করা বাধ্যতামূলক! অনুগ্রহ করে আপনার নিবন্ধিত মোবাইল নম্বর ও ব্যক্তিগত পাসওয়ার্ড দিয়ে সুপারভাইজার লগইন করুন।');
-      if (onOpenSupervisorLogin) {
-        onOpenSupervisorLogin();
-      }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
-    const name = loggedInSupervisor
-      ? `${loggedInSupervisor.name} (সুপারভাইজার)`
-      : submittedBy.trim() || 'অন-ডিউটি সুপারভাইজার';
-    const phone = loggedInSupervisor ? loggedInSupervisor.phone : supervisorPhone.trim();
-
-    if (!name) {
-      setFormValidationError('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর নাম লিখুন অথবা সুপারভাইজার হিসেবে লগইন করুন।');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    if (!phone) {
-      setFormValidationError('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর মোবাইল নম্বর নিশ্চিত করুন।');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
+  // Core function: Submit attendance for official approval under authenticated supervisor
+  const doSubmitForApproval = (supervisorObj: Supervisor) => {
     if (!validateAbsenceRemarks()) {
-      return;
+      return false;
     }
 
     const prevDate = selectedDate;
@@ -374,8 +430,8 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
 
     onSubmitForApproval({
       date: prevDate,
-      submittedBy: name,
-      supervisorPhone: phone,
+      submittedBy: `${supervisorObj.name} (সুপারভাইজার)`,
+      supervisorPhone: supervisorObj.phone,
       records: entries,
       notes: dayNotes.trim(),
     });
@@ -383,7 +439,7 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
     setLastSubmissionNotice({
       submittedDate: prevDate,
       nextDate: nextDate,
-      submittedBy: name,
+      submittedBy: `${supervisorObj.name} (সুপারভাইজার)`,
       mode: 'supervisor',
       recordCount: Object.keys(entries).length,
       absentCount: countAbsent,
@@ -392,10 +448,122 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
 
     setDayNotes('');
     setSupervisorSubmittedSuccess(true);
-
-    // Automatically transition to next date: the filled-up form clears and fresh form appears!
     setSelectedDate(nextDate);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    return true;
+  };
+
+  // 1. Action: Supervisor Submits for Approval (Strict Login & Password Enforced)
+  const handleSupervisorSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormValidationError('');
+
+    // If already authenticated as supervisor
+    if (loggedInSupervisor) {
+      doSubmitForApproval(loggedInSupervisor);
+      return;
+    }
+
+    // If not logged in yet, check chosen supervisor & inline password
+    const chosenSup = supervisors.find((s) => s.id === selectedSupervisorSubmitterId);
+    if (chosenSup) {
+      // If supervisor already has a password and inline password was typed:
+      if (chosenSup.password && inlineSupervisorPassword.trim()) {
+        if (inlineSupervisorPassword.trim() === chosenSup.password.trim()) {
+          if (onSupervisorLogin) onSupervisorLogin(chosenSup);
+          setInlineSupervisorPassword('');
+          setInlineSupervisorError('');
+          doSubmitForApproval(chosenSup);
+          return;
+        } else {
+          setInlineSupervisorError('ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন।');
+          setFormValidationError(`❌ ভুল পাসওয়ার্ড! "${chosenSup.name}"-এর জন্য সঠিক পাসওয়ার্ড দিন। পাসওয়ার্ড ছাড়া হাজিরা জমা হবে না।`);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+      }
+
+      // Password not entered inline yet -> Open prompt modal for password
+      setModalSupervisorId(chosenSup.id);
+      setModalError('');
+      setModalPassword('');
+      setShowSubmitPasswordModal(true);
+      return;
+    }
+
+    // No supervisor chosen -> Open modal to pick and enter password
+    setFormValidationError('🔒 হাজিরা জমা দিতে অনুগ্রহ করে আপনি কোন সুপারভাইজার তা নির্বাচন করুন এবং পাসওয়ার্ড দিন।');
+    setModalSupervisorId(supervisors[0]?.id || '');
+    setModalError('');
+    setModalPassword('');
+    setShowSubmitPasswordModal(true);
+  };
+
+  // Submit Password Verification Modal Handler
+  const handleModalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setModalError('');
+
+    const supId = modalSupervisorId || selectedSupervisorSubmitterId;
+    const targetSup = supervisors.find((s) => s.id === supId);
+    if (!targetSup) {
+      setModalError('দয়া করে একজন সুপারভাইজার নির্বাচন করুন।');
+      return;
+    }
+
+    // Case 1: First-time password set
+    if (!targetSup.password || targetSup.password.trim() === '') {
+      if (!modalNewPassword.trim()) {
+        setModalError('দয়া করে নতুন পাসওয়ার্ড লিখুন।');
+        return;
+      }
+      if (modalNewPassword.trim().length < 4) {
+        setModalError('পাসওয়ার্ড কমপক্ষে ৪ অক্ষরের হতে হবে।');
+        return;
+      }
+      if (modalNewPassword !== modalConfirmPassword) {
+        setModalError('নতুন পাসওয়ার্ড ও নিশ্চিতকরণ পাসওয়ার্ড মিলছে না!');
+        return;
+      }
+
+      setIsModalSubmitting(true);
+      try {
+        if (onUpdateSupervisorPassword) {
+          await onUpdateSupervisorPassword(targetSup.id, modalNewPassword.trim());
+        }
+        const updatedSup = { ...targetSup, password: modalNewPassword.trim(), passwordSet: true };
+        if (onSupervisorLogin) {
+          onSupervisorLogin(updatedSup);
+        }
+        setShowSubmitPasswordModal(false);
+        setModalPassword('');
+        setModalNewPassword('');
+        setModalConfirmPassword('');
+        doSubmitForApproval(updatedSup);
+      } catch (err) {
+        setModalError('পাসওয়ার্ড সেট করতে ত্রুটি হয়েছে।');
+      } finally {
+        setIsModalSubmitting(false);
+      }
+      return;
+    }
+
+    // Case 2: Existing password verify
+    if (!modalPassword.trim()) {
+      setModalError('দয়া করে আপনার গোপন পাসওয়ার্ড লিখুন।');
+      return;
+    }
+
+    if (modalPassword.trim() === targetSup.password.trim()) {
+      if (onSupervisorLogin) {
+        onSupervisorLogin(targetSup);
+      }
+      setShowSubmitPasswordModal(false);
+      setModalPassword('');
+      doSubmitForApproval(targetSup);
+    } else {
+      setModalError('❌ ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড ছাড়া হাজিরা অনুমোদনের জন্য দাখিল করা যাবে না।');
+    }
   };
 
   // 2. Action: Office Authority Direct Save
@@ -455,19 +623,8 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
       return;
     }
 
-    if (loggedInSupervisor) {
-      handleSupervisorSubmit(e);
-      return;
-    }
-
-    // Neither is logged in: strictly block submission and open login
-    setFormValidationError('🔒 হাজিরা জমা দিতে লগইন করা বাধ্যতামূলক! অনুগ্রহ করে আপনার নিবন্ধিত মোবাইল নম্বর ও ব্যক্তিগত পাসওয়ার্ড দিয়ে সুপারভাইজার লগইন করুন (অথবা অফিস পাসওয়ার্ড দিন)।');
-    if (roleMode === 'office') {
-      if (onOpenOfficeLogin) onOpenOfficeLogin();
-    } else {
-      if (onOpenSupervisorLogin) onOpenSupervisorLogin();
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Supervisor submission (requires password verification)
+    handleSupervisorSubmit(e);
   };
 
   // Stats for this date
@@ -1231,49 +1388,175 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
                 </div>
               </div>
             ) : (
-              /* Not logged in: Locked warning card */
-              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl p-4 sm:p-5 text-amber-950 shadow-2xs">
-                <div className="flex items-start gap-3.5">
-                  <div className="w-11 h-11 rounded-xl bg-amber-200 border border-amber-400 flex items-center justify-center text-amber-900 shrink-0 shadow-2xs">
-                    <Lock className="w-6 h-6" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="font-bold text-sm sm:text-base text-amber-950">
-                        হাজিরা জমা দেওয়ার জন্য সুপারভাইজার লগইন আবশ্যক
-                      </h4>
-                      <span className="text-[11px] bg-amber-600 text-white px-2.5 py-0.5 rounded-full font-bold">
-                        লগইন লক্ড
-                      </span>
+              /* When not yet logged in: Select Supervisor + Password verification box */
+              <div className="bg-gradient-to-br from-slate-50 to-cyan-50/50 border-2 border-cyan-300 rounded-xl p-4 sm:p-5 shadow-2xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-cyan-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-800 text-white flex items-center justify-center text-xs font-bold">
+                      👤
                     </div>
-                    <p className="text-xs sm:text-sm text-amber-900 mt-1 leading-relaxed">
-                      লগইন না করে কোনো ব্যক্তি বা সুপারভাইজার হাজিরা জমা দিতে পারবেন না। আপনার নিবন্ধিত অফিসিয়াল মোবাইল নম্বর এবং আপনার সেট করা ব্যক্তিগত পাসওয়ার্ড দিয়ে লগইন করে হাজিরা জমা দিন।
-                    </p>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                        সুপারভাইজার নির্বাচন ও পাসওয়ার্ড যাচাই (হাজিরা জমার জন্য বাধ্যতামূলক)
+                      </h4>
+                      <p className="text-[11px] text-slate-600">
+                        তালিকা থেকে নিজের নাম নির্বাচন করুন এবং আপনার গোপন পাসওয়ার্ড দিন। পাসওয়ার্ড ছাড়া হাজিরা দাখিল করা যাবে না।
+                      </p>
+                    </div>
+                  </div>
 
-                    <div className="flex flex-wrap items-center gap-3 mt-3 pt-2.5 border-t border-amber-200">
-                      {onOpenSupervisorLogin && (
+                  <span className="text-[11px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-full shrink-0 flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-amber-700" />
+                    <span>পাসওয়ার্ড আবশ্যক</span>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Step 1: Pick Supervisor */}
+                  <div>
+                    <label htmlFor="select-supervisor-submitter" className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-1">
+                      <span>১. আপনি কোন সুপারভাইজার? *</span>
+                    </label>
+                    <select
+                      id="select-supervisor-submitter"
+                      value={selectedSupervisorSubmitterId}
+                      onChange={(e) => handleSelectSupervisorDropdown(e.target.value)}
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-cyan-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-cyan-600 bg-white font-medium cursor-pointer shadow-2xs"
+                    >
+                      <option value="">-- নিজের নাম বেছে নিন --</option>
+                      {supervisors.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.group} - {s.phone})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Step 2: Registered Mobile Display */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-1">
+                      <Phone className="w-3.5 h-3.5 text-cyan-700" />
+                      <span>২. নিবন্ধিত অফিসিয়াল মোবাইল</span>
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={supervisorPhone || 'উপরে নাম নির্বাচন করলে নম্বর দেখাবে'}
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg bg-slate-100 text-slate-800 font-mono font-bold cursor-not-allowed"
+                    />
+                  </div>
+
+                  {/* Step 3: Password Field */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <KeyRound className="w-3.5 h-3.5 text-cyan-700" />
+                        <span>৩. আপনার পাসওয়ার্ড *</span>
+                      </span>
+                      {selectedSupervisorSubmitterId && !supervisors.find((s) => s.id === selectedSupervisorSubmitterId)?.password && (
+                        <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                          প্রথমবার: নতুন সেট করুন
+                        </span>
+                      )}
+                    </label>
+
+                    {selectedSupervisorSubmitterId && !supervisors.find((s) => s.id === selectedSupervisorSubmitterId)?.password ? (
+                      /* First time password creation */
+                      <div className="space-y-2 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200">
+                        <input
+                          type="password"
+                          value={inlineSupervisorNewPassword}
+                          onChange={(e) => {
+                            setInlineSupervisorNewPassword(e.target.value);
+                            setInlineSupervisorError('');
+                          }}
+                          placeholder="নতুন পাসওয়ার্ড দিন (কমপক্ষে ৪ অক্ষর)..."
+                          className="w-full px-2.5 py-1.5 text-xs font-bold border border-amber-300 rounded-md bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                        />
+                        <input
+                          type="password"
+                          value={inlineSupervisorConfirmPassword}
+                          onChange={(e) => {
+                            setInlineSupervisorConfirmPassword(e.target.value);
+                            setInlineSupervisorError('');
+                          }}
+                          placeholder="নতুন পাসওয়ার্ড নিশ্চিত করুন..."
+                          className="w-full px-2.5 py-1.5 text-xs font-bold border border-amber-300 rounded-md bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                        />
                         <button
                           type="button"
-                          onClick={onOpenSupervisorLogin}
-                          className="px-4 py-2 bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs sm:text-sm rounded-lg flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+                          onClick={() => handleInlineSupervisorLogin()}
+                          className="w-full py-1.5 bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs rounded-md transition-colors cursor-pointer shadow-xs"
                         >
-                          <User className="w-4 h-4 text-cyan-200" />
-                          <span>👷 সুপারভাইজার লগইন করুন (মোবাইল ও পাসওয়ার্ড)</span>
+                          পাসওয়ার্ড সেট ও লগইন
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRoleMode('office');
-                          if (onOpenOfficeLogin) onOpenOfficeLogin();
-                        }}
-                        className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-lg flex items-center gap-2 shadow-xs cursor-pointer border border-cyan-500/30 transition-colors"
-                      >
-                        <KeyRound className="w-4 h-4 text-cyan-400" />
-                        <span>🏢 অফিস লগইন (পাসওয়ার্ড: 1234)</span>
-                      </button>
-                    </div>
+                      </div>
+                    ) : (
+                      /* Existing Password Verification */
+                      <div className="flex gap-1.5">
+                        <div className="relative flex-1">
+                          <input
+                            id="input-inline-sup-password"
+                            type={showInlinePassword ? 'text' : 'password'}
+                            value={inlineSupervisorPassword}
+                            onChange={(e) => {
+                              setInlineSupervisorPassword(e.target.value);
+                              setInlineSupervisorError('');
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleInlineSupervisorLogin();
+                              }
+                            }}
+                            placeholder="পাসওয়ার্ড লিখুন..."
+                            className="w-full pl-3 pr-8 py-2 text-xs sm:text-sm font-bold border border-cyan-300 rounded-lg bg-white focus:outline-hidden focus:ring-2 focus:ring-cyan-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowInlinePassword(!showInlinePassword)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                            title={showInlinePassword ? 'পাসওয়ার্ড লুকান' : 'পাসওয়ার্ড দেখুন'}
+                          >
+                            {showInlinePassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleInlineSupervisorLogin()}
+                          className="px-3.5 py-2 bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0 shadow-xs"
+                        >
+                          লগইন
+                        </button>
+                      </div>
+                    )}
                   </div>
+                </div>
+
+                {inlineSupervisorError && (
+                  <div className="text-xs text-rose-700 font-bold bg-rose-50 border border-rose-300 p-2.5 rounded-lg flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{inlineSupervisorError}</span>
+                  </div>
+                )}
+                {inlineSupervisorSuccess && (
+                  <div className="text-xs text-emerald-800 font-bold bg-emerald-50 border border-emerald-300 p-2.5 rounded-lg flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{inlineSupervisorSuccess}</span>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-cyan-100/80 text-[11px] text-slate-600">
+                  <span>* কোনো ডিফল্ট পাসওয়ার্ড দেওয়া হয়নি। আপনি নিজেই প্রথমবার আপনার পাসওয়ার্ড সেট করবেন।</span>
+                  {onOpenSupervisorLogin && (
+                    <button
+                      type="button"
+                      onClick={onOpenSupervisorLogin}
+                      className="text-cyan-800 hover:text-cyan-950 font-bold underline cursor-pointer"
+                    >
+                      অথবা পূর্ণ লগইন ডায়ালগ খুলুন →
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -1460,19 +1743,14 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
                 </>
               ) : (
                 <>
-                  {/* Unauthenticated User: Prompt Login on Submit */}
+                  {/* Unauthenticated User: Prompt Password / Login on Submit */}
                   <button
                     id="btn-login-to-submit"
-                    type="button"
-                    onClick={() => {
-                      setFormValidationError('🔒 হাজিরা জমা দিতে অনুগ্রহ করে প্রথমে সুপারভাইজার হিসেবে (মোবাইল ও পাসওয়ার্ড দিয়ে) অথবা অফিস কর্তৃপক্ষ হিসেবে লগইন করুন।');
-                      if (onOpenSupervisorLogin) onOpenSupervisorLogin();
-                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
+                    type="submit"
                     className="flex-1 sm:flex-none px-6 py-3 bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer ring-2 ring-cyan-500/30"
                   >
-                    <Lock className="w-4 h-4 text-amber-300" />
-                    <span>🔒 লগইন করে হাজিরা জমা দিন (সুপারভাইজার লগইন আবশ্যক)</span>
+                    <Send className="w-4 h-4 text-cyan-200" />
+                    <span>পাসওয়ার্ড দিয়ে হাজিরা জমা দিন (অনুমোদন আবেদন)</span>
                   </button>
 
                   <button
@@ -1493,6 +1771,169 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
           </div>
         </div>
       </form>
+
+      {/* Submit Password Verification Modal */}
+      {showSubmitPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-cyan-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-cyan-900 via-slate-900 to-cyan-950 text-white p-5 text-center relative">
+              <button
+                type="button"
+                onClick={() => setShowSubmitPasswordModal(false)}
+                className="absolute top-3.5 right-3.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="w-12 h-12 rounded-xl bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center mx-auto mb-2 text-cyan-300">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-bold text-white">সুপারভাইজার পাসওয়ার্ড দিয়ে সাবমিট করুন</h3>
+              <p className="text-xs text-cyan-200/90 mt-0.5">
+                হাজিরা অফিস অনুমোদনের জন্য দাখিল করতে পাসওয়ার্ড যাচাই আবশ্যক
+              </p>
+            </div>
+
+            <form onSubmit={handleModalSubmit} className="p-5 space-y-4">
+              <div className="text-xs text-amber-900 bg-amber-50 p-3 rounded-xl border border-amber-200 leading-relaxed flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  পাসওয়ার্ড দিয়ে লগইন না করে কোনো সুপারভাইজারের নামেই হাজিরা অনুমোদনের জন্য দাখিল করা সম্ভব নয়।
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  ১. আপনি কোন সুপারভাইজার? (নাম বাছুন) *
+                </label>
+                <select
+                  value={modalSupervisorId || selectedSupervisorSubmitterId}
+                  onChange={(e) => {
+                    setModalSupervisorId(e.target.value);
+                    setSelectedSupervisorSubmitterId(e.target.value);
+                    const matched = supervisors.find((s) => s.id === e.target.value);
+                    if (matched) {
+                      setSubmittedBy(matched.name);
+                      setSupervisorPhone(matched.phone);
+                    }
+                    setModalError('');
+                  }}
+                  className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-600 font-bold bg-white cursor-pointer"
+                >
+                  <option value="">-- নিজের নাম বেছে নিন --</option>
+                  {supervisors.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.group} - {s.phone})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Show selected supervisor phone & password field */}
+              {(() => {
+                const targetSup = supervisors.find(
+                  (s) => s.id === (modalSupervisorId || selectedSupervisorSubmitterId)
+                );
+                if (!targetSup) return null;
+                const hasPassword = Boolean(targetSup.password && targetSup.password.trim() !== '');
+
+                return (
+                  <div className="space-y-3 pt-1">
+                    <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex items-center justify-between">
+                      <span className="font-semibold text-slate-700">অফিসিয়াল মোবাইল:</span>
+                      <span className="font-mono font-bold text-cyan-900">{targetSup.phone}</span>
+                    </div>
+
+                    {!hasPassword ? (
+                      /* Set new password */
+                      <div className="space-y-2 bg-cyan-50/60 p-3 rounded-xl border border-cyan-200">
+                        <p className="text-xs font-bold text-cyan-950">
+                          💡 প্রথমবার সাবমিট: আপনার নতুন পাসওয়ার্ড সেট করুন
+                        </p>
+                        <div>
+                          <input
+                            type="password"
+                            value={modalNewPassword}
+                            onChange={(e) => {
+                              setModalNewPassword(e.target.value);
+                              setModalError('');
+                            }}
+                            placeholder="নতুন পাসওয়ার্ড দিন (কমপক্ষে ৪ অক্ষর)..."
+                            className="w-full px-3 py-2 text-xs font-bold border border-slate-300 rounded-lg bg-white"
+                          />
+                        </div>
+                        <div>
+                          <input
+                            type="password"
+                            value={modalConfirmPassword}
+                            onChange={(e) => {
+                              setModalConfirmPassword(e.target.value);
+                              setModalError('');
+                            }}
+                            placeholder="নতুন পাসওয়ার্ড পুনরায় লিখুন..."
+                            className="w-full px-3 py-2 text-xs font-bold border border-slate-300 rounded-lg bg-white"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      /* Enter existing password */
+                      <div>
+                        <label className="block text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                          <span>২. আপনার গোপন পাসওয়ার্ড লিখুন:</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showModalPassword ? 'text' : 'password'}
+                            autoFocus
+                            value={modalPassword}
+                            onChange={(e) => {
+                              setModalPassword(e.target.value);
+                              setModalError('');
+                            }}
+                            placeholder="পাসওয়ার্ড লিখুন..."
+                            className="w-full pl-3 pr-9 py-2.5 text-sm font-bold border border-slate-300 rounded-lg focus:ring-2 focus:ring-cyan-600"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowModalPassword(!showModalPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            {showModalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {modalError && (
+                <div className="text-xs text-rose-700 font-bold bg-rose-50 border border-rose-300 p-2.5 rounded-lg flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSubmitPasswordModal(false)}
+                  className="flex-1 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  disabled={isModalSubmitting}
+                  className="flex-1 py-2.5 text-xs sm:text-sm font-bold text-white bg-cyan-700 hover:bg-cyan-800 rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>যাচাই ও হাজিরা জমা দিন</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* WhatsApp Share Modal */}
       {showShareModal && (

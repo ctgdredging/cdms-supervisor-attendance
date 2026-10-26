@@ -694,6 +694,8 @@ export default function App() {
               setShowAuthModal(true);
             }}
             onLogoutSupervisor={handleLogoutSupervisor}
+            onSupervisorLogin={handleSupervisorLogin}
+            onUpdateSupervisorPassword={handleUpdateSupervisorPassword}
           />
         )}
 
