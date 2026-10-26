@@ -3,6 +3,7 @@ import { Header, AppTab } from './components/Header';
 import { DailyAttendanceForm } from './components/DailyAttendanceForm';
 import { OfficeApprovalPanel } from './components/OfficeApprovalPanel';
 import { OfficePinModal } from './components/OfficePinModal';
+import { AuthModal } from './components/AuthModal';
 import { DailySummaryPreview } from './components/DailySummaryPreview';
 import { MonthlySalarySheet } from './components/MonthlySalarySheet';
 import { AttendanceHistory } from './components/AttendanceHistory';
@@ -16,6 +17,11 @@ import {
   getInitialAttendanceData,
   getInitialPendingSubmissions,
 } from './data/initialData';
+import {
+  getStoredAuthSession,
+  saveAuthSession,
+  clearAuthSession,
+} from './utils/authUtils';
 import {
   getTodayDateString,
   getCurrentYearMonth,
@@ -36,17 +42,33 @@ import {
 } from './lib/firebase';
 import { RotateCcw, ShieldCheck, Github, MessageCircle, Lock, Cloud } from 'lucide-react';
 
-const STORAGE_KEY_SUPERVISORS = 'cdma_supervisors_v2';
+const STORAGE_KEY_SUPERVISORS = 'cdms_supervisors_v2';
 // Clean storage keys without any demo/sample attendance data so user fills from September 01
-const STORAGE_KEY_ATTENDANCE = 'cdma_attendance_records_v3_clean';
-const STORAGE_KEY_PENDING = 'cdma_pending_submissions_v3_clean';
-const STORAGE_KEY_PIN = 'cdma_office_pin_v2';
+const STORAGE_KEY_ATTENDANCE = 'cdms_attendance_records_v3_clean';
+const STORAGE_KEY_PENDING = 'cdms_pending_submissions_v3_clean';
+const STORAGE_KEY_PIN = 'cdms_office_pin_v2';
 const DEFAULT_OFFICE_PIN = '1234';
+
+// Migration / fallback helper to preserve any data previously stored in cdma keys
+const getMigratedStorageItem = (newKey: string, oldKey: string): string | null => {
+  try {
+    const val = localStorage.getItem(newKey);
+    if (val !== null) return val;
+    const oldVal = localStorage.getItem(oldKey);
+    if (oldVal !== null) {
+      localStorage.setItem(newKey, oldVal);
+      return oldVal;
+    }
+  } catch (e) {
+    // fallback
+  }
+  return null;
+};
 
 export default function App() {
   const { year: currentYear, month: currentMonth } = getCurrentYearMonth();
-  // Default to September 01 as requested by user ("ami September 01 tarikh theke sob fill up korbo")
-  const [selectedDate, setSelectedDate] = useState<string>(() => `${currentYear}-09-01`);
+  // Default to today's real-time date when user opens the app
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateString());
   const [activeTab, setActiveTab] = useState<AppTab>('attendance');
   const [showGitHubModal, setShowGitHubModal] = useState<boolean>(false);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState<boolean>(false);
@@ -59,7 +81,7 @@ export default function App() {
   // Office PIN state
   const [officePin, setOfficePin] = useState<string>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY_PIN) || DEFAULT_OFFICE_PIN;
+      return getMigratedStorageItem(STORAGE_KEY_PIN, 'cdma_office_pin_v2') || DEFAULT_OFFICE_PIN;
     } catch (e) {
       return DEFAULT_OFFICE_PIN;
     }
@@ -68,23 +90,48 @@ export default function App() {
   // Office Authentication Session State
   const [isOfficeAuthenticated, setIsOfficeAuthenticated] = useState<boolean>(() => {
     try {
-      return sessionStorage.getItem('cdma_office_auth') === 'true';
+      const session = getStoredAuthSession();
+      if (session?.role === 'office') return true;
+      return (
+        sessionStorage.getItem('cdms_office_auth') === 'true' ||
+        sessionStorage.getItem('cdma_office_auth') === 'true'
+      );
     } catch (e) {
       return false;
     }
   });
 
-  // Supervisors state with local storage (preserving user updated phone numbers)
+  // Supervisor Authentication Session State
+  const [loggedInSupervisor, setLoggedInSupervisor] = useState<Supervisor | null>(() => {
+    try {
+      const session = getStoredAuthSession();
+      if (session && session.role === 'supervisor' && session.supervisorId) {
+        return INITIAL_SUPERVISORS.find((s) => s.id === session.supervisorId) || null;
+      }
+    } catch (e) {
+      // fallback
+    }
+    return null;
+  });
+
+  // Auth Modal State
+  const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
+  const [authModalTab, setAuthModalTab] = useState<'office' | 'supervisor'>('supervisor');
+
+  // Supervisors state with local storage (preserving official phone numbers and custom passwords)
   const [supervisors, setSupervisors] = useState<Supervisor[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_SUPERVISORS);
+      const saved = getMigratedStorageItem(STORAGE_KEY_SUPERVISORS, 'cdma_supervisors_v2');
       if (saved) {
         const parsed: Supervisor[] = JSON.parse(saved);
         return INITIAL_SUPERVISORS.map((init) => {
           const match = parsed.find((p) => p.id === init.id || p.name === init.name);
           return {
             ...init,
-            phone: match?.phone || init.phone,
+            phone: init.phone,
+            phones: init.phones,
+            password: match?.password,
+            passwordSet: match?.passwordSet || Boolean(match?.password),
           };
         });
       }
@@ -97,7 +144,7 @@ export default function App() {
   // Approved attendance data state with local storage (clean, no dummy data)
   const [attendanceData, setAttendanceData] = useState<Record<string, DayAttendance>>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_ATTENDANCE);
+      const saved = getMigratedStorageItem(STORAGE_KEY_ATTENDANCE, 'cdma_attendance_records_v3_clean');
       if (saved) {
         return JSON.parse(saved);
       }
@@ -110,7 +157,7 @@ export default function App() {
   // Pending submissions state (awaiting Office Authority approval)
   const [pendingSubmissions, setPendingSubmissions] = useState<PendingAttendanceSubmission[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_PENDING);
+      const saved = getMigratedStorageItem(STORAGE_KEY_PENDING, 'cdma_pending_submissions_v3_clean');
       if (saved) {
         return JSON.parse(saved);
       }
@@ -166,7 +213,20 @@ export default function App() {
         if (!isSubscribed) return;
         setIsCloudConnected(true);
         if (cloudSupervisors.length > 0) {
-          setSupervisors(cloudSupervisors);
+          const merged = cloudSupervisors.map((cSup) => {
+            const init = INITIAL_SUPERVISORS.find((i) => i.id === cSup.id || i.name === cSup.name);
+            if (init) {
+              return {
+                ...cSup,
+                phone: init.phone,
+                phones: init.phones,
+                password: cSup.password,
+                passwordSet: cSup.passwordSet || Boolean(cSup.password),
+              };
+            }
+            return cSup;
+          });
+          setSupervisors(merged);
         }
       },
       (err) => {
@@ -211,9 +271,9 @@ export default function App() {
   // (Ensures any previous attendance you saved on PC is immediately available on Mobile)
   useEffect(() => {
     let isCancelled = false;
-    const MIGRATION_FLAG = 'cdma_local_records_synced_v1';
+    const MIGRATION_FLAG = 'cdms_local_records_synced_v1';
 
-    if (localStorage.getItem(MIGRATION_FLAG)) {
+    if (localStorage.getItem(MIGRATION_FLAG) || localStorage.getItem('cdma_local_records_synced_v1')) {
       return;
     }
 
@@ -287,7 +347,7 @@ export default function App() {
   // Persist office session auth
   useEffect(() => {
     try {
-      sessionStorage.setItem('cdma_office_auth', isOfficeAuthenticated ? 'true' : 'false');
+      sessionStorage.setItem('cdms_office_auth', isOfficeAuthenticated ? 'true' : 'false');
     } catch (e) {
       // ignore
     }
@@ -316,8 +376,6 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
-
-    alert(`✅ সফল! ${formatBengaliDate(submission.date)} তারিখের হাজিরা ক্লাউড ডেটাবেজে সংরক্ষিত হয়েছে এবং অফিস কর্তৃপক্ষের অনুমোদনের জন্য দাখিল করা হয়েছে।\nপূরণকারী: ${submission.submittedBy} (${submission.supervisorPhone || 'মোবাইল নেই'})।\n\nযে কোনো ডিভাইস (মোবাইল বা পিসি) থেকে অফিস কর্তৃপক্ষ 'অফিস অনুমোদন' প্যানেলে গিয়ে অনুমোদন দিলেই এটি চূড়ান্ত বেতন রেজিস্টারে যুক্ত হবে।`);
   };
 
   // 2. Office Authority approves submission -> commits to attendanceData & Firestore Cloud!
@@ -398,16 +456,81 @@ export default function App() {
     }
   };
 
-  // 5. PIN Verification
+  // 5. PIN Verification / Office Login
   const handleVerifyPin = (inputPin: string): boolean => {
-    if (inputPin === officePin) {
+    if (inputPin.trim() === officePin.trim()) {
       setIsOfficeAuthenticated(true);
+      setLoggedInSupervisor(null);
+      sessionStorage.setItem('cdms_office_auth', 'true');
+      saveAuthSession({ role: 'office', loginTime: new Date().toISOString() });
       return true;
     }
     return false;
   };
 
-  // 6. Change PIN
+  // 6. Supervisor Login
+  const handleSupervisorLogin = (sup: Supervisor) => {
+    setLoggedInSupervisor(sup);
+    setIsOfficeAuthenticated(false);
+    sessionStorage.removeItem('cdms_office_auth');
+    saveAuthSession({
+      role: 'supervisor',
+      supervisorId: sup.id,
+      loginTime: new Date().toISOString(),
+    });
+    setActiveTab('attendance');
+  };
+
+  // 7. Logout Office
+  const handleLogoutOffice = () => {
+    setIsOfficeAuthenticated(false);
+    sessionStorage.removeItem('cdms_office_auth');
+    clearAuthSession();
+  };
+
+  // 8. Logout Supervisor
+  const handleLogoutSupervisor = () => {
+    setLoggedInSupervisor(null);
+    clearAuthSession();
+  };
+
+  // 9. Update Supervisor Password
+  const handleUpdateSupervisorPassword = async (supervisorId: string, newPassword: string) => {
+    const updated = supervisors.map((s) => {
+      if (s.id === supervisorId) {
+        return { ...s, password: newPassword, passwordSet: true };
+      }
+      return s;
+    });
+    setSupervisors(updated);
+    localStorage.setItem(STORAGE_KEY_SUPERVISORS, JSON.stringify(updated));
+    const targetSup = updated.find((s) => s.id === supervisorId);
+    if (targetSup) {
+      await saveSupervisorToCloud(targetSup).catch((err) =>
+        console.warn('Could not save supervisor password to cloud:', err)
+      );
+    }
+  };
+
+  // 10. Reset Supervisor Password (Office Authority)
+  const handleResetSupervisorPassword = async (supervisorId: string) => {
+    const updated = supervisors.map((s) => {
+      if (s.id === supervisorId) {
+        return { ...s, password: '', passwordSet: false };
+      }
+      return s;
+    });
+    setSupervisors(updated);
+    localStorage.setItem(STORAGE_KEY_SUPERVISORS, JSON.stringify(updated));
+    const targetSup = updated.find((s) => s.id === supervisorId);
+    if (targetSup) {
+      await saveSupervisorToCloud(targetSup).catch((err) =>
+        console.warn('Could not reset supervisor password in cloud:', err)
+      );
+    }
+  };
+
+  // 11. Change PIN
   const handleChangePin = async (oldP: string, newP: string): Promise<boolean> => {
     if (oldP === officePin) {
       setOfficePin(newP);
@@ -419,11 +542,6 @@ export default function App() {
       return true;
     }
     return false;
-  };
-
-  // 7. Logout Office
-  const handleLogoutOffice = () => {
-    setIsOfficeAuthenticated(false);
   };
 
   // Add supervisor handler
@@ -532,12 +650,18 @@ export default function App() {
         }}
         pendingCount={pendingSubmissions.length}
         isOfficeAuthenticated={isOfficeAuthenticated}
+        loggedInSupervisor={loggedInSupervisor}
         isCloudConnected={isCloudConnected}
         isSyncing={isSyncing}
         onOpenGitHubModal={() => setShowGitHubModal(true)}
         onOpenWhatsAppModal={() => setShowWhatsAppModal(true)}
         onOpenPinModal={() => setShowPinModal(true)}
+        onOpenAuthModal={(tab) => {
+          setAuthModalTab(tab || 'supervisor');
+          setShowAuthModal(true);
+        }}
         onLogoutOffice={handleLogoutOffice}
+        onLogoutSupervisor={handleLogoutSupervisor}
       />
 
       {/* Main View Area */}
@@ -556,6 +680,12 @@ export default function App() {
             onVerifyOfficePin={handleVerifyPin}
             onLogoutOffice={handleLogoutOffice}
             pendingCount={pendingSubmissions.length}
+            loggedInSupervisor={loggedInSupervisor}
+            onOpenSupervisorLogin={() => {
+              setAuthModalTab('supervisor');
+              setShowAuthModal(true);
+            }}
+            onLogoutSupervisor={handleLogoutSupervisor}
           />
         )}
 
@@ -615,6 +745,7 @@ export default function App() {
             onResetToDefaults={handleResetToDefaultSupervisors}
             isOfficeAuthenticated={isOfficeAuthenticated}
             onOpenOfficeLogin={() => setShowPinModal(true)}
+            onResetSupervisorPassword={handleResetSupervisorPassword}
           />
         )}
 
@@ -628,7 +759,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-cyan-700" />
             <span className="font-semibold text-slate-800">
-              চট্টগ্রাম ড্রেজার মালিক সমিতি
+              চট্টগ্রাম ড্রেজার মালিক সমিতি (CDMS)
             </span>
             <span>— সুপারভাইজার ডিজিটাল উপস্থিতি ও বেতন রেজিস্টার</span>
           </div>
@@ -690,6 +821,17 @@ export default function App() {
         onClose={() => setShowPinModal(false)}
         onVerifyPin={handleVerifyPin}
         onSuccessRedirect={() => setActiveTab('approval')}
+      />
+
+      {/* Unified Auth Modal (Supervisor & Office) */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        supervisors={supervisors}
+        onOfficeLogin={handleVerifyPin}
+        onSupervisorLogin={handleSupervisorLogin}
+        onUpdateSupervisorPassword={handleUpdateSupervisorPassword}
+        initialTab={authModalTab}
       />
 
       {/* GitHub Deploy Instructions Modal */}

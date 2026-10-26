@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { formatBengaliDate, getTodayDateString, toBengaliNumber } from '../utils/bengaliUtils';
 
+import { Supervisor } from '../types';
+
 export type AppTab = 'attendance' | 'approval' | 'preview' | 'monthly' | 'history' | 'supervisors' | 'rules';
 
 interface HeaderProps {
@@ -27,12 +29,15 @@ interface HeaderProps {
   todayStats: { present: number; absent: number; total: number };
   pendingCount: number;
   isOfficeAuthenticated: boolean;
+  loggedInSupervisor?: Supervisor | null;
   isCloudConnected?: boolean;
   isSyncing?: boolean;
   onOpenGitHubModal: () => void;
   onOpenWhatsAppModal: () => void;
   onOpenPinModal: () => void;
+  onOpenAuthModal: (tab?: 'office' | 'supervisor') => void;
   onLogoutOffice: () => void;
+  onLogoutSupervisor?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -42,12 +47,15 @@ export const Header: React.FC<HeaderProps> = ({
   todayStats,
   pendingCount,
   isOfficeAuthenticated,
+  loggedInSupervisor = null,
   isCloudConnected = true,
   isSyncing = false,
   onOpenGitHubModal,
   onOpenWhatsAppModal,
   onOpenPinModal,
+  onOpenAuthModal,
   onLogoutOffice,
+  onLogoutSupervisor,
 }) => {
   const todayStr = getTodayDateString();
 
@@ -63,7 +71,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] font-bold tracking-wider text-cyan-300 bg-cyan-950/70 px-2 py-0.5 rounded border border-cyan-500/30">
-                  অফিসিয়াল পোর্টাল
+                  CDMS অফিসিয়াল পোর্টাল
                 </span>
                 <span className="text-xs text-slate-300">চট্টগ্রাম বন্দর এলাকা</span>
                 {isOfficeAuthenticated && (
@@ -92,7 +100,7 @@ export const Header: React.FC<HeaderProps> = ({
                 )}
               </div>
               <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-white mt-0.5">
-                চট্টগ্রাম ড্রেজার মালিক সমিতি
+                চট্টগ্রাম ড্রেজার মালিক সমিতি (CDMS)
               </h1>
               <p className="text-xs text-cyan-100/80 font-normal">
                 সুপারভাইজারদের বন্দর ব্লক হাজিরা, অফিস অনুমোদন (PIN) ও বেতন কর্তন রেজিস্টার
@@ -107,7 +115,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>{formatBengaliDate(todayStr)}</span>
             </div>
 
-            {/* Office Lock / Unlock Button */}
+            {/* Authentication Buttons: Office or Supervisor */}
             {isOfficeAuthenticated ? (
               <button
                 type="button"
@@ -116,19 +124,51 @@ export const Header: React.FC<HeaderProps> = ({
                 title="অফিস সেশন লক করুন"
               >
                 <Unlock className="w-3.5 h-3.5" />
-                <span>অফিস লগইন (লক)</span>
+                <span>🏢 অফিস লগইন (লক)</span>
               </button>
-            ) : (
+            ) : loggedInSupervisor ? (
               <button
                 type="button"
-                onClick={onOpenPinModal}
-                className="bg-cyan-800 hover:bg-cyan-700 text-cyan-100 border border-cyan-600/50 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="অফিস পিন দিয়ে প্রবেশ করুন"
+                onClick={onLogoutSupervisor}
+                className="bg-cyan-600/30 hover:bg-rose-600/30 border border-cyan-400/40 hover:border-rose-400/40 text-cyan-200 hover:text-rose-200 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="সুপারভাইজার সেশন লগআউট করুন"
               >
-                <Lock className="w-3.5 h-3.5 text-cyan-300" />
-                <span>অফিস পিন (PIN)</span>
+                <Unlock className="w-3.5 h-3.5" />
+                <span>👷 {loggedInSupervisor.name} (লগআউট)</span>
               </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onOpenAuthModal('supervisor')}
+                  className="bg-cyan-800 hover:bg-cyan-700 text-cyan-100 border border-cyan-600/50 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  title="সুপারভাইজার মোবাইল ও পাসওয়ার্ড দিয়ে লগইন করুন"
+                >
+                  <Lock className="w-3.5 h-3.5 text-cyan-300" />
+                  <span>সুপারভাইজার লগইন</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenAuthModal('office')}
+                  className="bg-emerald-800 hover:bg-emerald-700 text-emerald-100 border border-emerald-600/50 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                  title="অফিস পিন দিয়ে প্রবেশ করুন"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>অফিস পিন</span>
+                </button>
+              </div>
             )}
+
+            {/* GitHub Deploy button */}
+            <button
+              type="button"
+              onClick={onOpenGitHubModal}
+              className="bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1 transition-colors cursor-pointer"
+              title="GitHub Pages পাবলিশ নির্দেশিকা"
+            >
+              <Github className="w-3.5 h-3.5 text-cyan-300" />
+              <span>পাবলিশ</span>
+            </button>
 
             <button
               id="btn-header-wa"

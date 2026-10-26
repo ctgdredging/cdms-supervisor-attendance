@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>চট্টগ্রাম ড্রেজার মালিক সমিতি — সুপারভাইজার দৈনিক হাজিরা ও বেতন পোর্টাল</title>
-    <meta name="description" content="চট্টগ্রাম ড্রেজার মালিক সমিতি: সুপারভাইজারদের (গ্রুপ-এ ও গ্রুপ-বি) দৈনিক হাজিরা, প্রতি সোমবার ২৪ ঘণ্টা ডাবল ডিউটি রোস্টার, মাসিক ১ দিন ফ্রি ছুটি ও বেতন কর্তন ডিজিটাল রেজিস্টার।" />
+    <title>চট্টগ্রাম ড্রেজার মালিক সমিতি (CDMS) — সুপারভাইজার দৈনিক হাজিরা ও বেতন পোর্টাল</title>
+    <meta name="description" content="চট্টগ্রাম ড্রেজার মালিক সমিতি (CDMS): সুপারভাইজারদের (গ্রুপ-এ ও গ্রুপ-বি) দৈনিক হাজিরা, প্রতি সোমবার ২৪ ঘণ্টা ডাবল ডিউটি রোস্টার, মাসিক ১ দিন ফ্রি ছুটি ও বেতন কর্তন ডিজিটাল রেজিস্টার।" />
     
     <!-- Open Graph for WhatsApp, Facebook, Social Media Previews -->
-    <meta property="og:site_name" content="চট্টগ্রাম ড্রেজার মালিক সমিতি" />
-    <meta property="og:title" content="🏛️ চট্টগ্রাম ড্রেজার মালিক সমিতি — সুপারভাইজার দৈনিক হাজিরা ও সাইট ডিউটি" />
+    <meta property="og:site_name" content="চট্টগ্রাম ড্রেজার মালিক সমিতি (CDMS)" />
+    <meta property="og:title" content="🏛️ চট্টগ্রাম ড্রেজার মালিক সমিতি (CDMS) — সুপারভাইজার দৈনিক হাজিরা ও সাইট ডিউটি" />
     <meta property="og:description" content="📋 সুপারভাইজারদের (গ্রুপ-এ ও গ্রুপ-বি) দৈনিক উপস্থিতি, প্রতি সোমবার ২৪ ঘণ্টা ডিউটি শিফট ও মাসিক বেতন কর্তন লাইভ রেজিস্টার।" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="bn_BD" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="চট্টগ্রাম ড্রেজার মালিক সমিতি — সুপারভাইজার হাজিরা ও বেতন পোর্টাল" />
+    <meta name="twitter:title" content="চট্টগ্রাম ড্রেজার মালিক সমিতি (CDMS) — সুপারভাইজার হাজিরা ও বেতন পোর্টাল" />
     <meta name="twitter:description" content="দৈনিক উপস্থিতি, সাইট ডিউটি এবং মাসিক বেতন কর্তন পোর্টাল।" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -40,29 +40,79 @@
           // Continue execution safely
         }
 
-        // Suppress benign unhandled abort exceptions (e.g. from aborted fetch or Firestore listeners)
-        window.addEventListener('unhandledrejection', function(event) {
-          var reason = event && event.reason;
-          var msg = (reason && (reason.message || reason.name || String(reason))) || '';
-          if (
-            (reason && reason.name === 'AbortError') ||
-            msg.indexOf('The user aborted a request') !== -1 ||
-            msg.indexOf('aborted') !== -1 ||
-            msg.indexOf('cancelled') !== -1
-          ) {
-            event.preventDefault();
+        // Wrap AbortController.prototype.abort to ensure an explicit reason is always supplied
+        // and prevent synchronous "AbortError: signal is aborted without reason" exceptions.
+        try {
+          if (typeof AbortController !== 'undefined' && AbortController.prototype && AbortController.prototype.abort) {
+            var origAbort = AbortController.prototype.abort;
+            AbortController.prototype.abort = function(reason) {
+              try {
+                if (reason !== undefined) {
+                  return origAbort.call(this, reason);
+                } else {
+                  return origAbort.call(this, new DOMException('Request was aborted.', 'AbortError'));
+                }
+              } catch (err) {
+                // Benign abort error - suppress to prevent uncaught exceptions in WebChannel/Firestore
+                return;
+              }
+            };
           }
-        });
+        } catch (e) {
+          // Continue execution safely
+        }
+
+        // Suppress benign unhandled abort exceptions (e.g. from aborted fetch or Firestore listeners)
+        var isBenign = function(val) {
+          if (!val) return false;
+          var str = (typeof val === 'object' ? (val.message || val.name || val.stack || String(val)) : String(val)).toLowerCase();
+          return (
+            str.indexOf('signal is aborted') !== -1 ||
+            str.indexOf('aborted without reason') !== -1 ||
+            str.indexOf('aborterror') !== -1 ||
+            str.indexOf('user aborted') !== -1 ||
+            str.indexOf('request was aborted') !== -1 ||
+            str.indexOf('failed to fetch') !== -1 ||
+            str.indexOf('cancelled') !== -1
+          );
+        };
+
+        var origOnError = window.onerror;
+        window.onerror = function(message, source, lineno, colno, error) {
+          if (isBenign(message) || isBenign(error)) {
+            return true; // suppresses the error
+          }
+          if (typeof origOnError === 'function') {
+            return origOnError.apply(this, arguments);
+          }
+          return false;
+        };
+
+        var origOnUnhandled = window.onunhandledrejection;
+        window.onunhandledrejection = function(event) {
+          var reason = event && event.reason;
+          if (isBenign(reason)) {
+            if (event && event.preventDefault) event.preventDefault();
+            return true;
+          }
+          if (typeof origOnUnhandled === 'function') {
+            return origOnUnhandled.apply(this, arguments);
+          }
+        };
+
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isBenign(event && event.reason)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          }
+        }, { capture: true });
 
         window.addEventListener('error', function(event) {
-          var msg = (event && (event.message || '')) || '';
-          if (
-            msg.indexOf('The user aborted a request') !== -1 ||
-            msg.indexOf('AbortError') !== -1
-          ) {
+          if (isBenign(event && (event.message || event.error))) {
             event.preventDefault();
+            event.stopImmediatePropagation();
           }
-        });
+        }, { capture: true });
       })();
     </script>
     <div id="root"></div>

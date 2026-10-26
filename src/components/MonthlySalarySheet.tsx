@@ -587,6 +587,8 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
           supervisors={supervisors}
           attendanceData={attendanceData}
           onClose={() => setShowShareModal(false)}
+          initialYear={selectedYear}
+          initialMonth={selectedMonth}
         />
       )}
     </div>

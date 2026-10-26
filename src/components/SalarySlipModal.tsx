@@ -143,10 +143,29 @@ export const SalarySlipModal: React.FC<SalarySlipModalProps> = ({
             </div>
           </div>
 
+          {/* Absent Dates List if any */}
+          {report.absentDates && report.absentDates.length > 0 && (
+            <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-xl text-xs space-y-1.5">
+              <span className="font-bold text-rose-900 block">
+                অনুপস্থিতির নির্দিষ্ট তারিখসমূহ (মোট {toBengaliNumber(report.actualMissedDays)} দিন):
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {report.absentDates.map((abs, idx) => (
+                  <div key={idx} className="bg-white p-1.5 px-2.5 rounded border border-rose-200 flex items-center justify-between text-[11px]">
+                    <span className="font-medium text-slate-800">{abs.formattedBengaliDate}</span>
+                    <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${abs.isMonday24h ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700'}`}>
+                      {abs.isMonday24h ? 'সোম ২৪ঘণ্টা (২ দিন)' : 'সাধারণ (১ দিন)'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Special notice if Monday 24h duty absent */}
           {report.monday24hAbsentDays > 0 && (
-            <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-900 flex items-start gap-2">
-              <Zap className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-950 flex items-start gap-2">
+              <Zap className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <strong>বিশেষ কর্তন উল্লেখ:</strong> সমিতির নীতিমালা অনুসারে প্রতি সোমবারের ২৪ ঘণ্টা (ডাবল ডিউটি) শিফটে অনুপস্থিত থাকার কারণে {toBengaliNumber(report.monday24hAbsentDays)}টি অনুপস্থিতির বিপরীতে মোট <strong>{toBengaliNumber(report.monday24hAbsentDays * 2)} দিনের বেতন কর্তন</strong> হিসাব করা হয়েছে।
               </div>

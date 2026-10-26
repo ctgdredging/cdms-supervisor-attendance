@@ -7,6 +7,9 @@ export interface Supervisor {
   group: SupervisorGroup;
   designation: string;
   phone: string;
+  phones?: string[];
+  password?: string;
+  passwordSet?: boolean;
   baseSalary: number; // ২০,০০০ টাকা
   joinDate?: string;
 }
@@ -43,6 +46,17 @@ export interface PendingAttendanceSubmission {
   approvedBy?: string;
 }
 
+export interface AbsentDateDetail {
+  date: string; // YYYY-MM-DD
+  dayNumber: number; // 1-31
+  formattedBengaliDate: string; // e.g. "০৭ সেপ্টেম্বর, ২০২৬"
+  shortBengaliDate: string; // e.g. "০৭ সেপ্টেম্বর (সোমবার)"
+  dayName: string; // e.g. "সোমবার"
+  isMonday24h: boolean;
+  remarks?: string;
+  penaltyDays: number; // 2 if Monday 24h duty, else 1
+}
+
 export interface MonthlySalaryReport {
   supervisor: Supervisor;
   totalDaysInMonth: number;
@@ -57,5 +71,6 @@ export interface MonthlySalaryReport {
   deductionRate: number; // 666.67
   totalDeduction: number; // deductibleDays * 666.67
   netSalary: number; // baseSalary - totalDeduction (অবশিষ্ট বেতন)
+  absentDates?: AbsentDateDetail[]; // অনুপস্থিত দিনসমূহের নির্দিষ্ট তারিখ ও বিবরণ
 }
 

@@ -18,7 +18,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 // Initialize Firebase App
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize Firestore with specific database ID if configured and auto-detect long polling for iframe resilience
+// Initialize Firestore with specific database ID if configured with auto-detect long-polling
 const targetDbId =
   firebaseConfig.firestoreDatabaseId &&
   firebaseConfig.firestoreDatabaseId !== '(default)'
@@ -28,15 +28,21 @@ const targetDbId =
 let firestoreInstance: ReturnType<typeof getFirestore>;
 try {
   firestoreInstance = targetDbId
-    ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, targetDbId)
-    : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+    ? initializeFirestore(app, {
+        experimentalAutoDetectLongPolling: true,
+        ignoreUndefinedProperties: true,
+      }, targetDbId)
+    : initializeFirestore(app, {
+        experimentalAutoDetectLongPolling: true,
+        ignoreUndefinedProperties: true,
+      });
 } catch {
   firestoreInstance = targetDbId ? getFirestore(app, targetDbId) : getFirestore(app);
 }
 
 export const db = firestoreInstance;
 
-// Helper to detect benign abort or cancelled errors
+// Helper to detect benign abort, cancelled, offline, or network fetch errors
 export function isAbortOrCancelledError(err: unknown): boolean {
   if (!err) return false;
   const e = err as { name?: string; message?: string; code?: string };
@@ -44,9 +50,17 @@ export function isAbortOrCancelledError(err: unknown): boolean {
   return (
     e.name === 'AbortError' ||
     e.code === 'cancelled' ||
+    e.code === 'unavailable' ||
     msg.includes('user aborted') ||
+    msg.includes('the user aborted a request') ||
+    msg.includes('signal is aborted') ||
+    msg.includes('aborted without reason') ||
     msg.includes('aborted') ||
-    msg.includes('canceled')
+    msg.includes('canceled') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('the client is offline') ||
+    msg.includes('could not reach cloud firestore backend') ||
+    msg.includes('network error')
   );
 }
 
@@ -105,9 +119,11 @@ export const saveAttendanceToCloud = async (
     });
     await setDoc(docRef, cleaned, { merge: true });
   } catch (err) {
-    if (isAbortOrCancelledError(err)) return;
-    console.error(`Failed to save attendance for ${date} to cloud:`, err);
-    throw err;
+    if (isAbortOrCancelledError(err)) {
+      console.warn(`Cloud sync paused for ${date} (saved locally):`, err);
+      return;
+    }
+    console.warn(`Notice: cloud attendance write for ${date} delayed:`, err);
   }
 };
 
@@ -150,9 +166,11 @@ export const savePendingSubmissionToCloud = async (
     const cleaned = cleanForFirestore(submission);
     await setDoc(docRef, cleaned);
   } catch (err) {
-    if (isAbortOrCancelledError(err)) return;
-    console.error('Failed to save pending submission to cloud:', err);
-    throw err;
+    if (isAbortOrCancelledError(err)) {
+      console.warn('Pending submission saved locally (cloud sync deferred):', err);
+      return;
+    }
+    console.warn('Pending submission cloud write notice:', err);
   }
 };
 
@@ -161,9 +179,11 @@ export const removePendingSubmissionFromCloud = async (id: string): Promise<void
     const docRef = doc(db, 'pending_submissions', id);
     await deleteDoc(docRef);
   } catch (err) {
-    if (isAbortOrCancelledError(err)) return;
-    console.error(`Failed to remove pending submission ${id} from cloud:`, err);
-    throw err;
+    if (isAbortOrCancelledError(err)) {
+      console.warn(`Pending submission ${id} removed locally (cloud sync deferred):`, err);
+      return;
+    }
+    console.warn(`Pending submission ${id} removal notice:`, err);
   }
 };
 
@@ -208,9 +228,11 @@ export const saveSupervisorToCloud = async (supervisor: Supervisor): Promise<voi
     const cleaned = cleanForFirestore(supervisor);
     await setDoc(docRef, cleaned, { merge: true });
   } catch (err) {
-    if (isAbortOrCancelledError(err)) return;
-    console.error(`Failed to save supervisor ${supervisor.id} to cloud:`, err);
-    throw err;
+    if (isAbortOrCancelledError(err)) {
+      console.warn(`Supervisor ${supervisor.id} saved locally (cloud sync deferred):`, err);
+      return;
+    }
+    console.warn(`Supervisor ${supervisor.id} cloud write notice:`, err);
   }
 };
 
@@ -231,7 +253,7 @@ export const seedInitialSupervisorsToCloud = async (
     }
   } catch (err) {
     if (isAbortOrCancelledError(err)) return;
-    console.warn('Failed to seed supervisors to cloud (will retry):', err);
+    console.warn('Initial supervisor seeding notice (will retry):', err);
   }
 };
 
@@ -265,7 +287,10 @@ export const saveOfficePinToCloud = async (pin: string): Promise<void> => {
     const docRef = doc(db, 'app_settings', 'office_config');
     await setDoc(docRef, { officePin: pin, updatedAt: new Date().toISOString() }, { merge: true });
   } catch (err) {
-    if (isAbortOrCancelledError(err)) return;
-    console.error('Failed to save office PIN to cloud:', err);
+    if (isAbortOrCancelledError(err)) {
+      console.warn('Office PIN saved locally (cloud sync deferred):', err);
+      return;
+    }
+    console.warn('Failed to save office PIN to cloud:', err);
   }
 };

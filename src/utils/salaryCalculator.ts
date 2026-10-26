@@ -1,5 +1,11 @@
-import { Supervisor, DayAttendance, MonthlySalaryReport } from '../types';
-import { DEDUCTION_PER_DAY, MONTHLY_ALLOWED_LEAVE } from './bengaliUtils';
+import { Supervisor, DayAttendance, MonthlySalaryReport, AbsentDateDetail } from '../types';
+import {
+  DEDUCTION_PER_DAY,
+  MONTHLY_ALLOWED_LEAVE,
+  BENGALI_MONTHS,
+  BENGALI_DAYS,
+  toBengaliNumber,
+} from './bengaliUtils';
 import { getShiftInfoForDate } from './shiftCalculator';
 
 export function calculateMonthlyReport(
@@ -19,13 +25,14 @@ export function calculateMonthlyReport(
     const record = attendanceData[d];
     // Must be approved by office
     return record && (record.approvalStatus === 'approved' || !record.approvalStatus);
-  });
+  }).sort();
   const daysRecorded = monthDates.length;
 
   return supervisors.map((supervisor) => {
     let presentDays = 0;
     let regularAbsentDays = 0;
     let monday24hAbsentDays = 0;
+    const absentDates: AbsentDateDetail[] = [];
 
     monthDates.forEach((dateKey) => {
       const dayRecord = attendanceData[dateKey];
@@ -37,12 +44,40 @@ export function calculateMonthlyReport(
         if (entry.status === 'present') {
           presentDays += 1;
         } else if (entry.status === 'absent' || entry.status === 'leave') {
+          const parts = dateKey.split('-').map(Number);
+          const dObj = new Date(parts[0], parts[1] - 1, parts[2]);
+          const dayNum = parts[2];
+          const dName = BENGALI_DAYS[dObj.getDay()] || '';
+          const mName = BENGALI_MONTHS[parts[1] - 1] || '';
+          const formattedBengaliDate = `${toBengaliNumber(dayNum)} ${mName}, ${toBengaliNumber(parts[0])} (${dName})`;
+          const shortBengaliDate = `${toBengaliNumber(dayNum)} ${mName} (${dName})`;
+
           // যদি সোমবারে এই সুপারভাইজারের ২৪ ঘণ্টা ডিউটি ছিল এবং তিনি অনুপস্থিত থাকেন:
           // ২ দিনের বেতন কর্তন প্রযোজ্য
           if (is24hDutyDay) {
             monday24hAbsentDays += 1;
+            absentDates.push({
+              date: dateKey,
+              dayNumber: dayNum,
+              formattedBengaliDate,
+              shortBengaliDate,
+              dayName: dName,
+              isMonday24h: true,
+              remarks: entry.remarks,
+              penaltyDays: 2,
+            });
           } else {
             regularAbsentDays += 1;
+            absentDates.push({
+              date: dateKey,
+              dayNumber: dayNum,
+              formattedBengaliDate,
+              shortBengaliDate,
+              dayName: dName,
+              isMonday24h: false,
+              remarks: entry.remarks,
+              penaltyDays: 1,
+            });
           }
         }
       }
@@ -76,6 +111,7 @@ export function calculateMonthlyReport(
       deductionRate: DEDUCTION_PER_DAY,
       totalDeduction,
       netSalary,
+      absentDates,
     };
   });
 }

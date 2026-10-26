@@ -19,15 +19,19 @@ interface GitHubDeployModalProps {
 
 export const GitHubDeployModal: React.FC<GitHubDeployModalProps> = ({ onClose }) => {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [userToken, setUserToken] = useState<string>('');
 
-  const repoUrl = 'https://github.com/ctgdredging/cdma-supervisor-attendance';
-  const pagesUrl = 'https://ctgdredging.github.io/cdma-supervisor-attendance/';
+  const repoUrl = 'https://github.com/ctgdredging/cdms-supervisor-attendance';
+  const pagesUrl = 'https://ctgdredging.github.io/cdms-supervisor-attendance/';
 
   const gitCommands = `git add .
 git commit -m "Update supervisor attendance and salary system"
 git push origin main`;
 
-  const tokenPushCommand = `git push https://<YOUR_GITHUB_TOKEN>@github.com/ctgdredging/cdma-supervisor-attendance.git main`;
+  const tokenPushCommand = `git push https://<YOUR_GITHUB_TOKEN>@github.com/ctgdredging/cdms-supervisor-attendance.git main`;
+  const dynamicPushCommand = userToken.trim()
+    ? `git push https://${userToken.trim()}@github.com/ctgdredging/cdms-supervisor-attendance.git main`
+    : tokenPushCommand;
 
   const copyCommand = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
@@ -103,12 +107,55 @@ git push origin main`;
               </p>
             </div>
 
-            {/* Step 2 */}
+            {/* Step 2: PAT Token Generation Help */}
+            <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/70 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold text-xs">
+                    ২
+                  </span>
+                  <span className="font-bold text-amber-950">
+                    GitHub Token (PAT) তৈরি করার ১-ক্লিক লিংক:
+                  </span>
+                </div>
+                <a
+                  href="https://github.com/settings/tokens/new?description=CDMS+Supervisor+Attendance&scopes=repo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
+                >
+                  <span>টোকেন পেজ খুলুন</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+              <div className="pl-8 text-xs text-amber-900 space-y-2 leading-relaxed">
+                <p>
+                  উপরের বোতামে চাপ দিলে গিটহাবে নাম এবং <code className="bg-amber-200/70 px-1 py-0.5 rounded font-mono font-semibold">repo</code> পারমিশন স্বয়ংক্রিয়ভাবে সিলেক্ট হয়ে যাবে। শুধু নিচে নেমে সবুজ <strong>&quot;Generate token&quot;</strong> বোতামে চাপ দিয়ে টোকেনটি কপি করুন (যেমন: <code className="bg-amber-200/70 px-1 rounded font-mono text-[11px]">ghp_xxxxxx</code>)।
+                </p>
+                <div className="pt-1">
+                  <label className="block text-[11px] font-bold text-amber-950 mb-1">
+                    টোকেনটি এখানে পেস্ট করলে নিচের কমান্ডটি স্বয়ংক্রিয় তৈরি হয়ে যাবে:
+                  </label>
+                  <input
+                    type="text"
+                    value={userToken}
+                    onChange={(e) => setUserToken(e.target.value)}
+                    placeholder="আপনার ghp_... টোকেন পেস্ট করুন"
+                    className="w-full px-3 py-1.5 text-xs font-mono bg-white border border-amber-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+                <p className="text-[11px] text-amber-800 font-medium">
+                  💡 অথবা টোকেনটি চ্যাটে দিয়ে দিলেই সাথে সাথে সম্পূর্ণ স্বয়ংক্রিয় পুশ কনফিগারেশন করে দেওয়া হবে।
+                </p>
+              </div>
+            </div>
+
+            {/* Step 3 */}
             <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-cyan-700 text-white flex items-center justify-center font-bold text-xs">
-                    ২
+                    ৩
                   </span>
                   <span className="font-bold text-slate-800">
                     কোড পুশ করার কমান্ড (GitHub Push):
@@ -116,7 +163,7 @@ git push origin main`;
                 </div>
                 <button
                   type="button"
-                  onClick={() => copyCommand(gitCommands, 1)}
+                  onClick={() => copyCommand(userToken.trim() ? dynamicPushCommand : gitCommands, 1)}
                   className="px-2.5 py-1 text-xs font-medium rounded border border-slate-300 bg-white hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
                 >
                   {copiedIndex === 1 ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
@@ -126,22 +173,19 @@ git push origin main`;
 
               <div className="pl-8 space-y-2">
                 <pre className="p-3 bg-slate-900 text-cyan-300 font-mono text-xs rounded-lg overflow-x-auto leading-relaxed shadow-inner">
-                  {gitCommands}
+                  {userToken.trim() ? dynamicPushCommand : gitCommands}
                 </pre>
                 <p className="text-[11px] text-slate-600 leading-relaxed">
-                  * অথবা টোকেন দিয়ে সরাসরি পুশ করতে: <br />
-                  <code className="text-slate-800 bg-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">
-                    {tokenPushCommand}
-                  </code>
+                  * টার্মিনালে এক ক্লিকে সরাসরি পুশ করতে উপরের বোতাম থেকে কমান্ডটি কপি করে রান করুন।
                 </p>
               </div>
             </div>
 
-            {/* Step 3 */}
+            {/* Step 4 */}
             <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-cyan-700 text-white flex items-center justify-center font-bold text-xs">
-                  ৩
+                  ৪
                 </span>
                 <span className="font-bold text-slate-800">
                   আপনার লাইভ GitHub Pages ওয়েবসাইট লিংক:

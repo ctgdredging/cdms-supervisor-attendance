@@ -54,6 +54,9 @@ interface DailyAttendanceFormProps {
   onVerifyOfficePin?: (pin: string) => boolean;
   onLogoutOffice?: () => void;
   pendingCount?: number;
+  loggedInSupervisor?: Supervisor | null;
+  onOpenSupervisorLogin?: () => void;
+  onLogoutSupervisor?: () => void;
 }
 
 export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
@@ -68,6 +71,9 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
   onVerifyOfficePin,
   onLogoutOffice,
   pendingCount = 0,
+  loggedInSupervisor = null,
+  onOpenSupervisorLogin,
+  onLogoutSupervisor,
 }) => {
   const [entries, setEntries] = useState<Record<string, AttendanceEntry>>({});
   const [selectedSupervisorSubmitterId, setSelectedSupervisorSubmitterId] = useState<string>('');
@@ -78,9 +84,22 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
   const [officeSavedSuccess, setOfficeSavedSuccess] = useState<boolean>(false);
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
 
+  // Submission Notice & Form advance state
+  interface LastSubmissionRecord {
+    submittedDate: string;
+    nextDate: string;
+    submittedBy: string;
+    mode: 'office' | 'supervisor';
+    recordCount: number;
+    absentCount: number;
+    time: string;
+  }
+  const [lastSubmissionNotice, setLastSubmissionNotice] = useState<LastSubmissionRecord | null>(null);
+  const [formValidationError, setFormValidationError] = useState<string>('');
+
   // Mode: Office Authority or Supervisor Submitter
   const [roleMode, setRoleMode] = useState<'office' | 'supervisor'>(
-    isOfficeAuthenticated ? 'office' : 'office'
+    isOfficeAuthenticated ? 'office' : loggedInSupervisor ? 'supervisor' : 'office'
   );
   const [inlinePin, setInlinePin] = useState<string>('');
   const [inlinePinError, setInlinePinError] = useState<string>('');
@@ -88,14 +107,19 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
   // Shift & Rotation information for selectedDate
   const shiftInfo = getShiftInfoForDate(selectedDate);
 
-  // Sync with Office Authentication state
+  // Sync with Office Authentication & Logged in Supervisor state
   useEffect(() => {
     if (isOfficeAuthenticated) {
       setRoleMode('office');
       setSubmittedBy('অফিস কর্তৃপক্ষ (চট্টগ্রাম ড্রেজার মালিক সমিতি)');
       setSupervisorPhone('অফিস নিয়ন্ত্রণ কক্ষ (০১৮১২-১০০২০১)');
+    } else if (loggedInSupervisor) {
+      setRoleMode('supervisor');
+      setSubmittedBy(`${loggedInSupervisor.name} (সুপারভাইজার)`);
+      setSupervisorPhone(loggedInSupervisor.phone);
+      setSelectedSupervisorSubmitterId(loggedInSupervisor.id);
     }
-  }, [isOfficeAuthenticated]);
+  }, [isOfficeAuthenticated, loggedInSupervisor]);
 
   // Load existing records or initialize defaults for selected date
   useEffect(() => {
@@ -122,6 +146,9 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
     } else if (isOfficeAuthenticated || roleMode === 'office') {
       setSubmittedBy('অফিস কর্তৃপক্ষ (চট্টগ্রাম ড্রেজার মালিক সমিতি)');
       setSupervisorPhone('অফিস নিয়ন্ত্রণ কক্ষ (০১৮১২-১০০২০১)');
+    } else if (loggedInSupervisor) {
+      setSubmittedBy(`${loggedInSupervisor.name} (সুপারভাইজার)`);
+      setSupervisorPhone(loggedInSupervisor.phone);
     } else {
       setSubmittedBy((prev) => prev || '');
     }
@@ -246,42 +273,137 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
     setSelectedDate(`${year}-09-01`);
   };
 
+  // Helper to calculate the next calendar date (YYYY-MM-DD)
+  const getNextCalendarDate = (dateStr: string): string => {
+    try {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      dateObj.setDate(dateObj.getDate() + 1);
+      const nextY = dateObj.getFullYear();
+      const nextM = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const nextD = String(dateObj.getDate()).padStart(2, '0');
+      return `${nextY}-${nextM}-${nextD}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Reset current form entries to fresh blank state
+  const handleResetToFreshForm = () => {
+    const initialEntries: Record<string, AttendanceEntry> = {};
+    supervisors.forEach((sup) => {
+      initialEntries[sup.id] = {
+        supervisorId: sup.id,
+        status: 'present',
+        remarks: '',
+        isMonday24hDuty: shiftInfo.isGroupOn24hDuty(sup.group),
+      };
+    });
+    setEntries(initialEntries);
+    setDayNotes('');
+    setFormValidationError('');
+  };
+
+  // Helper to validate mandatory absence remarks
+  const validateAbsenceRemarks = (): boolean => {
+    const missingRemarkSupervisors: string[] = [];
+    supervisors.forEach((sup) => {
+      const ent = entries[sup.id];
+      if (ent && ent.status === 'absent' && (!ent.remarks || ent.remarks.trim() === '')) {
+        missingRemarkSupervisors.push(sup.name);
+      }
+    });
+
+    if (missingRemarkSupervisors.length > 0) {
+      setFormValidationError(
+        `⚠️ অনুপস্থিতি চিহ্নিত করার পর মন্তব্যের ঘরে কারণ লেখা বাধ্যতামূলক! অনুগ্রহ করে "${missingRemarkSupervisors.join('", "')}"-এর অনুপস্থিতির কারণ লিখুন।`
+      );
+      const firstMissing = supervisors.find(
+        (s) => entries[s.id]?.status === 'absent' && !entries[s.id]?.remarks?.trim()
+      );
+      if (firstMissing) {
+        const el = document.getElementById(`input-remarks-${firstMissing.id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus();
+        }
+      }
+      return false;
+    }
+    return true;
+  };
+
   // 1. Action: Supervisor Submits for Approval (Requires Name & Mobile)
   const handleSupervisorSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormValidationError('');
 
     const name = submittedBy.trim();
     const phone = supervisorPhone.trim();
 
     if (!name) {
-      alert('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর নাম লিখুন অথবা তালিকা থেকে বাছাই করুন।');
+      setFormValidationError('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর নাম লিখুন অথবা তালিকা থেকে বাছাই করুন।');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (!phone) {
-      alert('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর মোবাইল নম্বর লিখুন।');
+      setFormValidationError('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর মোবাইল নম্বর লিখুন।');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
+    if (!validateAbsenceRemarks()) {
+      return;
+    }
+
+    const prevDate = selectedDate;
+    const nextDate = getNextCalendarDate(prevDate);
+    const countAbsent = (Object.values(entries) as AttendanceEntry[]).filter((item) => item.status === 'absent').length;
+
     onSubmitForApproval({
-      date: selectedDate,
+      date: prevDate,
       submittedBy: name,
       supervisorPhone: phone,
       records: entries,
       notes: dayNotes.trim(),
     });
 
+    setLastSubmissionNotice({
+      submittedDate: prevDate,
+      nextDate: nextDate,
+      submittedBy: name,
+      mode: 'supervisor',
+      recordCount: Object.keys(entries).length,
+      absentCount: countAbsent,
+      time: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+    });
+
+    setDayNotes('');
     setSupervisorSubmittedSuccess(true);
-    setTimeout(() => setSupervisorSubmittedSuccess(false), 9000);
+
+    // Automatically transition to next date: the filled-up form clears and fresh form appears!
+    setSelectedDate(nextDate);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // 2. Action: Office Authority Direct Save
   const handleDirectOfficeSave = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    setFormValidationError('');
+
+    if (!validateAbsenceRemarks()) {
+      return;
+    }
+
     const name = submittedBy.trim() || 'অফিস কর্তৃপক্ষ (চট্টগ্রাম ড্রেজার মালিক সমিতি)';
     const phone = supervisorPhone.trim() || 'অফিস নিয়ন্ত্রণ কক্ষ (০১৮১২-১০০২০১)';
 
+    const prevDate = selectedDate;
+    const nextDate = getNextCalendarDate(prevDate);
+    const countAbsent = (Object.values(entries) as AttendanceEntry[]).filter((item) => item.status === 'absent').length;
+
     const dayRecord: DayAttendance = {
-      date: selectedDate,
+      date: prevDate,
       records: entries,
       submittedAt: new Date().toISOString(),
       submittedBy: name,
@@ -290,19 +412,36 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
       approvedAt: new Date().toISOString(),
       approvedBy: 'অফিস কর্তৃপক্ষ (চট্টগ্রাম ড্রেজার মালিক সমিতি)',
     };
-    onSaveAttendance(selectedDate, dayRecord);
+
+    onSaveAttendance(prevDate, dayRecord);
     setOfficeSavedSuccess(true);
-    alert(`সফল! ${formatBengaliDate(selectedDate)} তারিখের হাজিরা অফিস কর্তৃপক্ষ হিসেবে সরাসরি অনুমোদিত ও চূড়ান্তভাবে সংরক্ষিত হয়েছে।`);
-    setTimeout(() => setOfficeSavedSuccess(false), 5000);
+
+    setLastSubmissionNotice({
+      submittedDate: prevDate,
+      nextDate: nextDate,
+      submittedBy: name,
+      mode: 'office',
+      recordCount: Object.keys(entries).length,
+      absentCount: countAbsent,
+      time: new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' }),
+    });
+
+    setDayNotes('');
+
+    // Automatically transition to next date: the filled-up form clears and fresh form appears!
+    setSelectedDate(nextDate);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Unified Form Submit Handler based on mode / authentication
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormValidationError('');
     if (isOfficeAuthenticated) {
       handleDirectOfficeSave(e);
     } else if (roleMode === 'office') {
-      alert('⚠️ অফিস কর্তৃপক্ষ হিসেবে সরাসরি সংরক্ষণ করতে দয়া করে আগে অফিস পাসওয়ার্ড বা পিন (1234) দিয়ে লগইন করুন।');
+      setFormValidationError('⚠️ অফিস কর্তৃপক্ষ হিসেবে সরাসরি সংরক্ষণ করতে দয়া করে আগে অফিস পাসওয়ার্ড বা পিন (1234) দিয়ে লগইন করুন।');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       handleSupervisorSubmit(e);
     }
@@ -459,7 +598,21 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
           </div>
 
           {/* Right: Note / Remarks Details */}
-          <div className="flex items-center gap-2 lg:w-72">
+          <div className="flex flex-col gap-1 lg:w-72">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-slate-500 font-medium">
+                {isAbsent ? (
+                  <span className="text-rose-600 font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-rose-600" />
+                    অনুপস্থিতির কারণ (বাধ্যতামূলক *)
+                  </span>
+                ) : isLeave ? (
+                  <span className="text-amber-700 font-semibold">ছুটির বিবরণ:</span>
+                ) : (
+                  <span className="text-slate-500">মন্তব্য (ঐচ্ছিক):</span>
+                )}
+              </span>
+            </div>
             <input
               id={`input-remarks-${sup.id}`}
               type="text"
@@ -467,12 +620,18 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
               onChange={(e) => handleRemarksChange(sup.id, e.target.value)}
               placeholder={
                 isAbsent
-                  ? 'অনুপস্থিতির কারণ লিখুন...'
+                  ? 'অনুপস্থিতির কারণ লিখুন (বাধ্যতামূলক)...'
                   : isLeave
-                  ? 'ছুটির কারণ...'
+                  ? 'ছুটির কারণ লিখুন...'
                   : 'মন্তব্য (ঐচ্ছিক)...'
               }
-              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-cyan-600 bg-white"
+              className={`w-full px-3 py-2 text-xs rounded-lg focus:outline-hidden transition-all bg-white ${
+                isAbsent && !entry.remarks?.trim()
+                  ? 'border-2 border-rose-400 bg-rose-50/50 ring-2 ring-rose-200 placeholder:text-rose-400 font-medium'
+                  : isAbsent
+                  ? 'border border-rose-300 focus:ring-2 focus:ring-rose-500'
+                  : 'border border-slate-300 focus:ring-2 focus:ring-cyan-600'
+              }`}
             />
           </div>
         </div>
@@ -482,6 +641,74 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Form Validation Error Alert Banner */}
+      {formValidationError && (
+        <div className="bg-rose-50 border-2 border-rose-400 text-rose-950 rounded-xl p-4 shadow-sm flex items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center gap-3 text-xs sm:text-sm font-bold">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+            <span>{formValidationError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFormValidationError('')}
+            className="text-xs text-rose-700 hover:text-rose-900 font-bold p-1 rounded-md hover:bg-rose-100 transition-colors cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Dynamic Success Notice: Automatically advances to new date */}
+      {lastSubmissionNotice && (
+        <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100 border-2 border-emerald-500 rounded-2xl p-4 sm:p-5 shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-fade-in">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs font-bold text-xl">
+              ✓
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 border border-emerald-300">
+                  {lastSubmissionNotice.mode === 'office' ? '🛡️ অফিস সরাসরি অনুমোদিত' : '📩 অফিস অনুমোদনের জন্য দাখিলকৃত'}
+                </span>
+                <span className="text-xs text-emerald-800 font-medium">
+                  সময়: {lastSubmissionNotice.time}
+                </span>
+              </div>
+              <h4 className="text-sm sm:text-base font-extrabold text-emerald-950 mt-1">
+                {formatBengaliDate(lastSubmissionNotice.submittedDate)}-এর হাজিরা সফলভাবে জমা হয়েছে!
+              </h4>
+              <p className="text-xs sm:text-sm text-emerald-900 mt-0.5 leading-relaxed">
+                পূরণকৃত পূর্বের ফর্মটি সফলভাবে সংরক্ষণ করা হয়েছে এবং এখন নতুন তারিখ{' '}
+                <strong className="text-cyan-950 font-bold bg-white/80 px-2 py-0.5 rounded border border-emerald-300 inline-block">
+                  {formatBengaliDate(lastSubmissionNotice.nextDate)}
+                </strong>
+                -এর জন্য সম্পূর্ণ নতুন ফাঁকা ফর্ম ওপেন হয়েছে।
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0 self-stretch sm:self-auto justify-end">
+            <button
+              id="btn-return-to-submitted-date"
+              type="button"
+              onClick={() => setSelectedDate(lastSubmissionNotice.submittedDate)}
+              className="text-xs font-bold px-3 py-2 rounded-xl bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-50 transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              title="জমা দেওয়া ফর্মটি পুনরায় দেখুন বা সম্পাদনা করুন"
+            >
+              <span>🔍 {formatBengaliDate(lastSubmissionNotice.submittedDate).split(' ')[0]} {formatBengaliDate(lastSubmissionNotice.submittedDate).split(' ')[1]}-এ ফিরে যান</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setLastSubmissionNotice(null)}
+              className="text-xs text-emerald-800 hover:text-emerald-950 p-2 rounded-lg hover:bg-emerald-200/50 transition-colors cursor-pointer"
+              title="বিজ্ঞপ্তি বন্ধ করুন"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Policy Banner Regarding Office Approval Workflow */}
       <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-cyan-950 text-white border border-cyan-700/40 rounded-xl p-4 sm:p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -672,6 +899,19 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
                 className="px-3 py-2 text-xs font-semibold rounded-lg bg-cyan-50 text-cyan-800 hover:bg-cyan-100 border border-cyan-200 transition-colors cursor-pointer"
               >
                 আজকে যান
+              </button>
+
+              <button
+                id="btn-next-new-form"
+                type="button"
+                onClick={() => {
+                  handleNextDay();
+                  setLastSubmissionNotice(null);
+                }}
+                className="px-3 py-2 text-xs font-bold rounded-lg bg-teal-50 text-teal-800 hover:bg-teal-100 border border-teal-300 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                title="পরবর্তী দিনের নতুন ফর্ম খুলুন"
+              >
+                <span>➕ পরবর্তী দিনের ফর্ম</span>
               </button>
             </div>
             <p className="text-sm font-semibold text-cyan-900 mt-2 flex items-center gap-1.5">
@@ -915,6 +1155,49 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
         ) : (
           /* Role Content 2: Supervisor fill-up mode */
           <div className="space-y-3">
+            {loggedInSupervisor ? (
+              <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                    {loggedInSupervisor.name.charAt(loggedInSupervisor.name.indexOf(' ') + 1) || 'স'}
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold text-cyan-950 flex items-center gap-2">
+                      <span>লগইনকৃত: {loggedInSupervisor.name}</span>
+                      <span className="text-[11px] bg-cyan-200/80 text-cyan-900 px-2 py-0.5 rounded-full font-semibold">
+                        {loggedInSupervisor.group}
+                      </span>
+                    </h4>
+                    <p className="text-xs text-cyan-800">
+                      মোবাইল: <span className="font-mono font-semibold">{loggedInSupervisor.phone}</span> • ড্রেজার সুপারভাইজার
+                    </p>
+                  </div>
+                </div>
+                {onLogoutSupervisor && (
+                  <button
+                    type="button"
+                    onClick={onLogoutSupervisor}
+                    className="text-xs font-semibold text-rose-700 hover:text-rose-900 bg-white hover:bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  >
+                    লগআউট
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-50/80 border border-amber-200 p-3 rounded-xl text-xs text-amber-900">
+                <span>লগইন করা নেই? আপনার মোবাইল ও ব্যক্তিগত পাসওয়ার্ড দিয়ে লগইন করে সহজেই হাজিরা জমা দিতে পারেন।</span>
+                {onOpenSupervisorLogin && (
+                  <button
+                    type="button"
+                    onClick={onOpenSupervisorLogin}
+                    className="px-3 py-1.5 bg-cyan-800 hover:bg-cyan-900 text-white rounded-lg font-bold text-xs shrink-0 cursor-pointer"
+                  >
+                    সুপারভাইজার লগইন করুন
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-cyan-700" />
               <h4 className="text-xs sm:text-sm font-bold text-slate-800">

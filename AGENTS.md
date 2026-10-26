@@ -2,7 +2,7 @@
 
 ## 1. Automatic GitHub Sync Policy
 - Whenever any feature, fix, or update is made in the codebase, stage all changes and create a git commit (`git add . && git commit -m "<descriptive message>"`).
-- If GitHub credentials / Personal Access Token are configured in the environment or git remote, immediately run `git push origin main` so GitHub Actions automatically deploys the latest version to GitHub Pages (`https://ctgdredging.github.io/cdma-supervisor-attendance/`).
+- If GitHub credentials / Personal Access Token are configured in the environment or git remote, immediately run `git push origin main` so GitHub Actions automatically deploys the latest version to GitHub Pages (`https://ctgdredging.github.io/cdms-supervisor-attendance/`).
 
 ## 2. Business Rules (Chittagong Dredger Owners Association)
 - Shift rotation and Monday 24h double-duty schedule calculations must be strictly adhered to.
