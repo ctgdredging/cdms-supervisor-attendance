@@ -358,6 +358,14 @@ export default function App() {
   const handleSubmitForApproval = async (
     submission: Omit<PendingAttendanceSubmission, 'id' | 'status' | 'submittedAt'>
   ) => {
+    // Defense-in-depth: Require authentication
+    if (!isOfficeAuthenticated && !loggedInSupervisor) {
+      alert('🔒 হাজিরা জমা দিতে অনুগ্রহ করে প্রথমে সুপারভাইজার হিসেবে (মোবাইল ও পাসওয়ার্ড) অথবা অফিস হিসেবে লগইন করুন।');
+      setAuthModalTab('supervisor');
+      setShowAuthModal(true);
+      return;
+    }
+
     setIsSyncing(true);
     const newSubmission: PendingAttendanceSubmission = {
       ...submission,

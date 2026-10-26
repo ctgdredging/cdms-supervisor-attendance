@@ -333,21 +333,33 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
     return true;
   };
 
-  // 1. Action: Supervisor Submits for Approval (Requires Name & Mobile)
+  // 1. Action: Supervisor Submits for Approval (Strict Login Enforced)
   const handleSupervisorSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormValidationError('');
 
-    const name = submittedBy.trim();
-    const phone = supervisorPhone.trim();
+    // Strict authentication check: Must be logged in as Supervisor or Office
+    if (!loggedInSupervisor && !isOfficeAuthenticated) {
+      setFormValidationError('🔒 হাজিরা জমা দিতে লগইন করা বাধ্যতামূলক! অনুগ্রহ করে আপনার নিবন্ধিত মোবাইল নম্বর ও ব্যক্তিগত পাসওয়ার্ড দিয়ে সুপারভাইজার লগইন করুন।');
+      if (onOpenSupervisorLogin) {
+        onOpenSupervisorLogin();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    const name = loggedInSupervisor
+      ? `${loggedInSupervisor.name} (সুপারভাইজার)`
+      : submittedBy.trim() || 'অন-ডিউটি সুপারভাইজার';
+    const phone = loggedInSupervisor ? loggedInSupervisor.phone : supervisorPhone.trim();
 
     if (!name) {
-      setFormValidationError('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর নাম লিখুন অথবা তালিকা থেকে বাছাই করুন।');
+      setFormValidationError('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর নাম লিখুন অথবা সুপারভাইজার হিসেবে লগইন করুন।');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (!phone) {
-      setFormValidationError('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর মোবাইল নম্বর লিখুন।');
+      setFormValidationError('⚠️ অনুগ্রহ করে হাজিরা পূরণকারীর মোবাইল নম্বর নিশ্চিত করুন।');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -437,14 +449,25 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormValidationError('');
+
     if (isOfficeAuthenticated) {
       handleDirectOfficeSave(e);
-    } else if (roleMode === 'office') {
-      setFormValidationError('⚠️ অফিস কর্তৃপক্ষ হিসেবে সরাসরি সংরক্ষণ করতে দয়া করে আগে অফিস পাসওয়ার্ড বা পিন (1234) দিয়ে লগইন করুন।');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      handleSupervisorSubmit(e);
+      return;
     }
+
+    if (loggedInSupervisor) {
+      handleSupervisorSubmit(e);
+      return;
+    }
+
+    // Neither is logged in: strictly block submission and open login
+    setFormValidationError('🔒 হাজিরা জমা দিতে লগইন করা বাধ্যতামূলক! অনুগ্রহ করে আপনার নিবন্ধিত মোবাইল নম্বর ও ব্যক্তিগত পাসওয়ার্ড দিয়ে সুপারভাইজার লগইন করুন (অথবা অফিস পাসওয়ার্ড দিন)।');
+    if (roleMode === 'office') {
+      if (onOpenOfficeLogin) onOpenOfficeLogin();
+    } else {
+      if (onOpenSupervisorLogin) onOpenSupervisorLogin();
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Stats for this date
@@ -718,33 +741,48 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
             </div>
             <div>
               <h4 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
-                <span>হাজিরা ও অফিস অনুমোদন ব্যবস্থা</span>
+                <span>হাজিরা ও অফিস অনুমোদন ব্যবস্থা (লগইন সংরক্ষিত)</span>
                 <span className="text-[11px] bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 px-2 py-0.5 rounded-full font-semibold">
-                  নিয়ম নির্দেশিকা
+                  কঠোর নিয়ম
                 </span>
               </h4>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mt-0.5">
-                যে-কেউ এই ফর্ম পূরণ করে নিজের <strong>নাম ও মোবাইল নম্বর</strong> প্রদান করে অনুমোদনের জন্য জমা দিতে পারবেন।
-                <strong className="text-cyan-200"> অফিস কর্তৃপক্ষ অনুমোদন দিলেই কেবল এটি মাসিক বেতন শিট ও অফিসিয়াল রেজিস্ট্রারে যুক্ত হবে।</strong>
+                সুপারভাইজারদের হাজিরা জমা দিতে তাদের <strong>নিবন্ধিত মোবাইল নম্বর ও ব্যক্তিগত পাসওয়ার্ড</strong> দিয়ে লগইন করতে হবে। লগইন ছাড়া কোনো হাজিরা দাখিল করা যাবে না।
+                <strong className="text-cyan-200"> অফিস কর্তৃপক্ষ অফিস পাসওয়ার্ড দিয়ে যাচাই করে অনুমোদন করবেন।</strong>
               </p>
             </div>
           </div>
 
-          <div className="shrink-0 flex items-center gap-2 self-stretch sm:self-auto justify-end">
+          <div className="shrink-0 flex flex-wrap items-center gap-2 self-stretch sm:self-auto justify-end">
             {isOfficeAuthenticated ? (
               <span className="flex items-center gap-1.5 text-xs bg-emerald-500/20 text-emerald-300 font-bold px-3 py-1.5 rounded-lg border border-emerald-400/40">
                 <ShieldCheck className="w-4 h-4" />
-                <span>অফিস সেশন সক্রিয়</span>
+                <span>🏢 অফিস সেশন সক্রিয়</span>
+              </span>
+            ) : loggedInSupervisor ? (
+              <span className="flex items-center gap-1.5 text-xs bg-cyan-500/20 text-cyan-200 font-bold px-3 py-1.5 rounded-lg border border-cyan-400/40">
+                <CheckCircle2 className="w-4 h-4 text-cyan-300" />
+                <span>👷 {loggedInSupervisor.name} (লগইনকৃত)</span>
               </span>
             ) : (
-              <button
-                type="button"
-                onClick={onOpenOfficeLogin}
-                className="flex items-center gap-1.5 text-xs bg-cyan-700 hover:bg-cyan-600 text-white font-bold px-3 py-1.5 rounded-lg border border-cyan-500/40 transition-colors cursor-pointer"
-              >
-                <Lock className="w-3.5 h-3.5 text-cyan-200" />
-                <span>অফিস লগইন (PIN)</span>
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={onOpenSupervisorLogin}
+                  className="flex items-center gap-1.5 text-xs bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-3 py-1.5 rounded-lg border border-cyan-400/40 transition-colors cursor-pointer shadow-xs"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>সুপারভাইজার লগইন</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenOfficeLogin}
+                  className="flex items-center gap-1.5 text-xs bg-slate-800 hover:bg-slate-700 text-white font-bold px-3 py-1.5 rounded-lg border border-slate-600 transition-colors cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5 text-cyan-200" />
+                  <span>অফিস লগইন (PIN)</span>
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -1153,116 +1191,92 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
             </div>
           )
         ) : (
-          /* Role Content 2: Supervisor fill-up mode */
+          /* Role Content 2: Supervisor fill-up mode (Strict Login Gated) */
           <div className="space-y-3">
             {loggedInSupervisor ? (
-              <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-cyan-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
+              <div className="bg-gradient-to-r from-cyan-50 to-teal-50 border-2 border-cyan-300 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-cyan-800 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-xs">
                     {loggedInSupervisor.name.charAt(loggedInSupervisor.name.indexOf(' ') + 1) || 'স'}
                   </div>
                   <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-cyan-950 flex items-center gap-2">
-                      <span>লগইনকৃত: {loggedInSupervisor.name}</span>
-                      <span className="text-[11px] bg-cyan-200/80 text-cyan-900 px-2 py-0.5 rounded-full font-semibold">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm sm:text-base font-bold text-cyan-950">
+                        {loggedInSupervisor.name}
+                      </h4>
+                      <span className="text-xs bg-cyan-700 text-white px-2.5 py-0.5 rounded-full font-bold">
                         {loggedInSupervisor.group}
                       </span>
-                    </h4>
-                    <p className="text-xs text-cyan-800">
-                      মোবাইল: <span className="font-mono font-semibold">{loggedInSupervisor.phone}</span> • ড্রেজার সুপারভাইজার
+                      <span className="text-xs bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        লগইন যাচাইকৃত
+                      </span>
+                    </div>
+                    <p className="text-xs text-cyan-900 mt-1">
+                      মোবাইল নম্বর: <strong className="font-mono">{loggedInSupervisor.phone}</strong> • এই অফিসিয়াল পরিচয়ে হাজিরা জমা হবে।
                     </p>
                   </div>
                 </div>
-                {onLogoutSupervisor && (
-                  <button
-                    type="button"
-                    onClick={onLogoutSupervisor}
-                    className="text-xs font-semibold text-rose-700 hover:text-rose-900 bg-white hover:bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                  >
-                    লগআউট
-                  </button>
-                )}
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {onLogoutSupervisor && (
+                    <button
+                      type="button"
+                      onClick={onLogoutSupervisor}
+                      className="text-xs font-semibold text-rose-700 hover:text-rose-900 bg-white hover:bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
+                      লগআউট
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-50/80 border border-amber-200 p-3 rounded-xl text-xs text-amber-900">
-                <span>লগইন করা নেই? আপনার মোবাইল ও ব্যক্তিগত পাসওয়ার্ড দিয়ে লগইন করে সহজেই হাজিরা জমা দিতে পারেন।</span>
-                {onOpenSupervisorLogin && (
-                  <button
-                    type="button"
-                    onClick={onOpenSupervisorLogin}
-                    className="px-3 py-1.5 bg-cyan-800 hover:bg-cyan-900 text-white rounded-lg font-bold text-xs shrink-0 cursor-pointer"
-                  >
-                    সুপারভাইজার লগইন করুন
-                  </button>
-                )}
+              /* Not logged in: Locked warning card */
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-xl p-4 sm:p-5 text-amber-950 shadow-2xs">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-amber-200 border border-amber-400 flex items-center justify-center text-amber-900 shrink-0 shadow-2xs">
+                    <Lock className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="font-bold text-sm sm:text-base text-amber-950">
+                        হাজিরা জমা দেওয়ার জন্য সুপারভাইজার লগইন আবশ্যক
+                      </h4>
+                      <span className="text-[11px] bg-amber-600 text-white px-2.5 py-0.5 rounded-full font-bold">
+                        লগইন লক্ড
+                      </span>
+                    </div>
+                    <p className="text-xs sm:text-sm text-amber-900 mt-1 leading-relaxed">
+                      লগইন না করে কোনো ব্যক্তি বা সুপারভাইজার হাজিরা জমা দিতে পারবেন না। আপনার নিবন্ধিত অফিসিয়াল মোবাইল নম্বর এবং আপনার সেট করা ব্যক্তিগত পাসওয়ার্ড দিয়ে লগইন করে হাজিরা জমা দিন।
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-3 mt-3 pt-2.5 border-t border-amber-200">
+                      {onOpenSupervisorLogin && (
+                        <button
+                          type="button"
+                          onClick={onOpenSupervisorLogin}
+                          className="px-4 py-2 bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs sm:text-sm rounded-lg flex items-center gap-2 shadow-xs cursor-pointer transition-colors"
+                        >
+                          <User className="w-4 h-4 text-cyan-200" />
+                          <span>👷 সুপারভাইজার লগইন করুন (মোবাইল ও পাসওয়ার্ড)</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRoleMode('office');
+                          if (onOpenOfficeLogin) onOpenOfficeLogin();
+                        }}
+                        className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-lg flex items-center gap-2 shadow-xs cursor-pointer border border-cyan-500/30 transition-colors"
+                      >
+                        <KeyRound className="w-4 h-4 text-cyan-400" />
+                        <span>🏢 অফিস লগইন (পাসওয়ার্ড: 1234)</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
-
-            <div className="flex items-center gap-2">
-              <User className="w-4 h-4 text-cyan-700" />
-              <h4 className="text-xs sm:text-sm font-bold text-slate-800">
-                সুপারভাইজার / পূরণকারীর বিবরণ (অনুমোদনের জন্য দাখিল করা হবে)
-              </h4>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Quick Dropdown Picker */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  ১. তালিকা থেকে বাছাই (সহজ উপায়)
-                </label>
-                <select
-                  value={selectedSupervisorSubmitterId}
-                  onChange={(e) => handleSelectSupervisorDropdown(e.target.value)}
-                  className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-cyan-600 bg-slate-50 font-medium cursor-pointer"
-                >
-                  <option value="">-- নিজের নাম তালিকা থেকে বেছে নিন --</option>
-                  {supervisors.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.group} - {s.phone})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Submitter Name Input */}
-              <div>
-                <label htmlFor="input-submitter-name" className="block text-xs font-bold text-slate-700 mb-1.5">
-                  ২. পূরণকারীর পূর্ণ নাম *
-                </label>
-                <div className="relative">
-                  <input
-                    id="input-submitter-name"
-                    type="text"
-                    required={roleMode === 'supervisor'}
-                    value={submittedBy}
-                    onChange={(e) => setSubmittedBy(e.target.value)}
-                    placeholder="যেমন: মোঃ জসিম"
-                    className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-cyan-600 font-semibold text-slate-900 bg-white"
-                  />
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                </div>
-              </div>
-
-              {/* Submitter Phone Input */}
-              <div>
-                <label htmlFor="input-submitter-phone" className="block text-xs font-bold text-slate-700 mb-1.5">
-                  ৩. পূরণকারীর মোবাইল নম্বর *
-                </label>
-                <div className="relative">
-                  <input
-                    id="input-submitter-phone"
-                    type="text"
-                    required={roleMode === 'supervisor'}
-                    value={supervisorPhone}
-                    onChange={(e) => setSupervisorPhone(e.target.value)}
-                    placeholder="যেমন: ০১৮১২-১০০২০১"
-                    className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm border border-slate-300 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-cyan-600 font-semibold text-slate-900 bg-white"
-                  />
-                  <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </div>
@@ -1383,9 +1397,15 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
                   <ShieldCheck className="w-4 h-4 text-emerald-600 inline" />
                   অফিস সেশন সক্রিয়: সংরক্ষণ করলে হাজিরা সরাসরি অনুমোদিত হয়ে <strong>চূড়ান্ত বেতন শিট ও রেজিস্টারে যোগ হবে</strong>।
                 </span>
+              ) : loggedInSupervisor ? (
+                <span className="text-cyan-900 font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 inline" />
+                  সুপারভাইজার সেশন সক্রিয়: <strong>{loggedInSupervisor.name}</strong> ({loggedInSupervisor.phone}) হিসেবে অফিসে অনুমোদনের জন্য দাখিল হবে।
+                </span>
               ) : (
-                <span>
-                  * সাধারণ সুপারভাইজার পূরণ করলে তা <strong>অফিস অনুমোদনের জন্য অপেক্ষমাণ (Pending)</strong> থাকবে। অথবা অফিস পাসওয়ার্ড দিয়ে সরাসরি সেভ করতে পারবেন।
+                <span className="text-amber-800 font-bold flex items-center gap-1.5">
+                  <Lock className="w-4 h-4 text-amber-600 inline" />
+                  লগইন আবশ্যক: হাজিরা জমা দিতে অবশ্যই সুপারভাইজার লগইন অথবা অফিস পাসওয়ার্ড দিন।
                 </span>
               )}
             </div>
@@ -1412,16 +1432,16 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
                     পেন্ডিং হিসেবে দাখিল
                   </button>
                 </>
-              ) : (
+              ) : loggedInSupervisor ? (
                 <>
-                  {/* Primary Submit Button for Supervisors */}
+                  {/* Primary Submit Button for Logged in Supervisor */}
                   <button
                     id="btn-supervisor-submit-approval"
                     type="submit"
                     className="flex-1 sm:flex-none px-6 py-3 bg-cyan-700 hover:bg-cyan-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
                     <Send className="w-4 h-4 text-cyan-200" />
-                    <span>অফিস অনুমোদনের জন্য হাজিরা জমা দিন</span>
+                    <span>অফিস অনুমোদনের জন্য হাজিরা জমা দিন ({loggedInSupervisor.name})</span>
                   </button>
 
                   {/* Quick Office Login to direct save */}
@@ -1430,12 +1450,42 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
                     type="button"
                     onClick={() => {
                       setRoleMode('office');
-                      onOpenOfficeLogin();
+                      if (onOpenOfficeLogin) onOpenOfficeLogin();
                     }}
                     className="flex-1 sm:flex-none px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer border border-cyan-500/40"
                   >
                     <KeyRound className="w-4 h-4 text-cyan-400" />
                     <span>🔑 অফিস পাসওয়ার্ড দিয়ে সেভ</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Unauthenticated User: Prompt Login on Submit */}
+                  <button
+                    id="btn-login-to-submit"
+                    type="button"
+                    onClick={() => {
+                      setFormValidationError('🔒 হাজিরা জমা দিতে অনুগ্রহ করে প্রথমে সুপারভাইজার হিসেবে (মোবাইল ও পাসওয়ার্ড দিয়ে) অথবা অফিস কর্তৃপক্ষ হিসেবে লগইন করুন।');
+                      if (onOpenSupervisorLogin) onOpenSupervisorLogin();
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="flex-1 sm:flex-none px-6 py-3 bg-cyan-800 hover:bg-cyan-900 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer ring-2 ring-cyan-500/30"
+                  >
+                    <Lock className="w-4 h-4 text-amber-300" />
+                    <span>🔒 লগইন করে হাজিরা জমা দিন (সুপারভাইজার লগইন আবশ্যক)</span>
+                  </button>
+
+                  <button
+                    id="btn-office-login-to-save"
+                    type="button"
+                    onClick={() => {
+                      setRoleMode('office');
+                      if (onOpenOfficeLogin) onOpenOfficeLogin();
+                    }}
+                    className="flex-1 sm:flex-none px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm rounded-xl shadow-xs flex items-center justify-center gap-2 transition-colors cursor-pointer border border-cyan-500/40"
+                  >
+                    <KeyRound className="w-4 h-4 text-cyan-400" />
+                    <span>🔑 অফিস পাসওয়ার্ড দিয়ে লগইন</span>
                   </button>
                 </>
               )}
