@@ -257,18 +257,11 @@ export const SalarySlipModal: React.FC<SalarySlipModalProps> = ({
           </div>
 
           {/* Signatures */}
-          <div className="pt-8 grid grid-cols-3 gap-4 text-center text-xs">
+          <div className="pt-8 flex justify-end pr-4 text-center text-xs">
             <div>
-              <div className="border-t border-slate-300 w-28 mx-auto mb-1"></div>
-              <span className="text-slate-700 font-medium">সুপারভাইজার স্বাক্ষর</span>
-            </div>
-            <div>
-              <div className="border-t border-slate-300 w-28 mx-auto mb-1"></div>
-              <span className="text-slate-700 font-medium">হিসাবরক্ষক</span>
-            </div>
-            <div>
-              <div className="border-t border-slate-300 w-28 mx-auto mb-1"></div>
-              <span className="text-slate-700 font-medium">সাধারণ সম্পাদক / সভাপতি</span>
+              <div className="border-t border-slate-400 w-48 mx-auto mb-1.5"></div>
+              <span className="text-slate-900 font-bold block text-sm">ম্যানেজার এর স্বাক্ষর</span>
+              <span className="text-[11px] text-slate-600">চট্টগ্রাম ড্রেজার মালিক সমিতি</span>
             </div>
           </div>
         </div>

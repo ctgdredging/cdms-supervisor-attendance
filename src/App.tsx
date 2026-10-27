@@ -800,27 +800,6 @@ export default function App() {
               <MessageCircle className="w-3.5 h-3.5" />
               <span>হোয়াটসঅ্যাপ রিপোর্ট</span>
             </button>
-            <span className="text-slate-300">|</span>
-            <button
-              id="btn-footer-github-deploy"
-              type="button"
-              onClick={() => setShowGitHubModal(true)}
-              className="text-slate-700 hover:text-cyan-800 font-medium flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <Github className="w-3.5 h-3.5 text-slate-600" />
-              <span>GitHub.io ডিপ্লয়</span>
-            </button>
-            <span className="text-slate-300">|</span>
-            <button
-              id="btn-reset-demo"
-              type="button"
-              onClick={handleResetData}
-              className="text-slate-600 hover:text-cyan-800 flex items-center gap-1 transition-colors cursor-pointer"
-              title="প্রাথমিক তথ্য পুনঃস্থাপন"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>ডিফল্ট রিসেট</span>
-            </button>
           </div>
         </div>
       </footer>

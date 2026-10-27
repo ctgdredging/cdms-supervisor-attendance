@@ -159,17 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
-            {/* GitHub Deploy button */}
-            <button
-              type="button"
-              onClick={onOpenGitHubModal}
-              className="bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white px-2.5 py-1.5 rounded-lg font-medium flex items-center gap-1 transition-colors cursor-pointer"
-              title="GitHub Pages পাবলিশ নির্দেশিকা"
-            >
-              <Github className="w-3.5 h-3.5 text-cyan-300" />
-              <span>পাবলিশ</span>
-            </button>
-
+            {/* WhatsApp Monthly Report button */}
             <button
               id="btn-header-wa"
               type="button"

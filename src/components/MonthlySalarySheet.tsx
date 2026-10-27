@@ -549,23 +549,13 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
         </div>
       </div>
 
-      {/* Official Signatures Section for Print View */}
+      {/* Official Signature Section for Print View */}
       <div className="hidden print-only mt-12 pt-8 border-t border-slate-400">
-        <div className="grid grid-cols-3 gap-8 text-center text-xs text-slate-800">
+        <div className="flex justify-end pr-8 text-center text-xs text-slate-800">
           <div>
-            <div className="border-t border-slate-400 w-40 mx-auto mb-1"></div>
-            <p className="font-semibold">প্রস্তুতকারী (অফিস কর্তৃপক্ষ)</p>
-            <p className="text-[11px] text-slate-600">চট্টগ্রাম ড্রেজার মালিক সমিতি</p>
-          </div>
-          <div>
-            <div className="border-t border-slate-400 w-40 mx-auto mb-1"></div>
-            <p className="font-semibold">হিসাবরক্ষক / ক্যাশিয়ার</p>
-            <p className="text-[11px] text-slate-600">চট্টগ্রাম ড্রেজার মালিক সমিতি</p>
-          </div>
-          <div>
-            <div className="border-t border-slate-400 w-40 mx-auto mb-1"></div>
-            <p className="font-semibold">সাধারণ সম্পাদক / সভাপতি</p>
-            <p className="text-[11px] text-slate-600">চট্টগ্রাম ড্রেজার মালিক সমিতি</p>
+            <div className="border-t-2 border-slate-600 w-52 mx-auto mb-1.5"></div>
+            <p className="font-bold text-sm text-slate-900">ম্যানেজার এর স্বাক্ষর</p>
+            <p className="text-xs text-slate-600">চট্টগ্রাম ড্রেজার মালিক সমিতি</p>
           </div>
         </div>
       </div>
