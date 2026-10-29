@@ -109,6 +109,20 @@ export const RulesGuide: React.FC = () => {
             প্রদেয় বেতন = ২০,০০০ - [(মোট কার্যকর অনুপস্থিতি - ১) × ৬৬৬.৬৭ ৳]।
           </div>
         </div>
+
+        {/* Rule 5: Office Discretionary Leave (Paid / No Deduction) */}
+        <div className="bg-white rounded-xl border border-teal-300 p-5 shadow-2xs md:col-span-2">
+          <div className="flex items-center gap-2.5 text-teal-900 font-bold text-base mb-2">
+            <Coffee className="w-5 h-5 text-teal-600" />
+            <span>৫. অফিস বিবেচনাধীন ছুটি (টাকা কাটবে না, সম্পূর্ণ বেতন প্রাপ্য)</span>
+          </div>
+          <p className="text-xs sm:text-sm text-slate-700 leading-relaxed">
+            ফিল্ড সুপারভাইজাররা কেবল &apos;উপস্থিত&apos; বা &apos;অনুপস্থিত&apos; তথ্য দিতে পারেন এবং অনুপস্থিত থাকলে মন্তব্যের ঘরে কারণ উল্লেখ করা বাধ্যতামূলক। অফিস কর্তৃপক্ষ এই অনুপস্থিতির কারণ পর্যালোচনা করে যদি তা যৌক্তিক ও বিবেচনাযোগ্য মনে করেন, তবে অফিস প্যানেল থেকে উক্ত দিনের হাজিরাকে <strong>&apos;ছুটি (বেতনযুক্ত)&apos;</strong> হিসেবে অনুমোদন দিতে পারবেন। অফিস কর্তৃক অনুমোদিত ছুটির জন্য <strong>কোনো বেতন কর্তন করা হবে না (বেতন ধরা হবে)</strong>।
+          </p>
+          <div className="mt-3 bg-teal-50 text-teal-950 px-3 py-2 rounded-lg text-xs font-semibold">
+            ছুটি মঞ্জুরির ক্ষমতা কেবল অফিস কর্তৃপক্ষের এবং অনুমোদিত ছুটির সম্পূর্ণ বেতন প্রদান করা হয়।
+          </div>
+        </div>
       </div>
 
       {/* Rotation Calendar & Example Reference */}

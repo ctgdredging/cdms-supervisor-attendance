@@ -30,6 +30,7 @@ export function calculateMonthlyReport(
 
   return supervisors.map((supervisor) => {
     let presentDays = 0;
+    let leaveDays = 0;
     let regularAbsentDays = 0;
     let monday24hAbsentDays = 0;
     const absentDates: AbsentDateDetail[] = [];
@@ -43,7 +44,10 @@ export function calculateMonthlyReport(
       if (entry) {
         if (entry.status === 'present') {
           presentDays += 1;
-        } else if (entry.status === 'absent' || entry.status === 'leave') {
+        } else if (entry.status === 'leave') {
+          // অফিস কর্তৃক অনুমোদিত/বিবেচনাধীন ছুটি: টাকা কাটবে না, বেতন ধরা হবে
+          leaveDays += 1;
+        } else if (entry.status === 'absent') {
           const parts = dateKey.split('-').map(Number);
           const dObj = new Date(parts[0], parts[1] - 1, parts[2]);
           const dayNum = parts[2];
@@ -52,7 +56,7 @@ export function calculateMonthlyReport(
           const formattedBengaliDate = `${toBengaliNumber(dayNum)} ${mName}, ${toBengaliNumber(parts[0])} (${dName})`;
           const shortBengaliDate = `${toBengaliNumber(dayNum)} ${mName} (${dName})`;
 
-          // যদি সোমবারে এই সুপারভাইজারের ২৪ ঘণ্টা ডিউটি ছিল এবং তিনি অনুপস্থিত থাকেন:
+          // যদি সোমবারে এই সুপারভাইজারের ২৪ ঘণ্টা ডিউটি ছিল এবং তিনি অননুমোদিত অনুপস্থিত থাকেন:
           // ২ দিনের বেতন কর্তন প্রযোজ্য
           if (is24hDutyDay) {
             monday24hAbsentDays += 1;
@@ -83,13 +87,13 @@ export function calculateMonthlyReport(
       }
     });
 
-    // মোট কার্যকর অনুপস্থিতির দিন সংখ্যা (সোমবারের ২৪ ঘণ্টার ১টি অনুপস্থিতি = ২ দিন কর্তন হিসাব)
+    // মোট কার্যকর অনুপস্থিতির দিন সংখ্যা (অননুমোদিত অনুপস্থিতির ক্ষেত্রে প্রযোজ্য)
     const effectiveAbsentDays = regularAbsentDays + monday24hAbsentDays * 2;
     const actualMissedDays = regularAbsentDays + monday24hAbsentDays;
 
-    // মাসিক নির্ধারিত অনুমোদিত ছুটি: ১ দিন ফ্রি (কর্তনমুক্ত)
+    // মাসিক নির্ধারিত অনুমোদিত ফ্রি ক্যাজুয়াল ছুটি: ১ দিন ফ্রি (কর্তনমুক্ত)
     const allowedLeaveDays = Math.min(effectiveAbsentDays, MONTHLY_ALLOWED_LEAVE);
-    // নিট বেতন কর্তনযোগ্য দিন = মোট কার্যকর অনুপস্থিতি থেকে ১ দিন বাদ
+    // নিট বেতন কর্তনযোগ্য দিন = মোট কার্যকর অননুমোদিত অনুপস্থিতি থেকে ১ দিন বাদ
     const deductibleDays = Math.max(0, effectiveAbsentDays - MONTHLY_ALLOWED_LEAVE);
 
     // মোট কর্তন: দিনপ্রতি ৬৬৬.৬৭ টাকা
@@ -102,6 +106,7 @@ export function calculateMonthlyReport(
       totalDaysInMonth,
       daysRecorded,
       presentDays,
+      leaveDays,
       regularAbsentDays,
       monday24hAbsentDays,
       effectiveAbsentDays,

@@ -281,8 +281,12 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
     }
   };
 
-  // Handle individual status change - FREELY ACCESSIBLE TO ALL
+  // Handle individual status change
   const handleStatusChange = (supervisorId: string, status: AttendanceStatus) => {
+    if (status === 'leave' && !isOfficeAuthenticated && roleMode !== 'office') {
+      alert('🔒 "ছুটি" মঞ্জুর করার ক্ষমতা শুধুমাত্র অফিস কর্তৃপক্ষের।\nমাঠ পর্যায়ের সুপারভাইজার অনুপস্থিত থাকলে "অনুপস্থিত" সিলেক্ট করে কারণ উল্লেখ করুন। অফিস কর্তৃপক্ষ কারণ যাচাই করে ছুটি বিবেচনা করবে এবং বেতন প্রদান করবে।');
+      return;
+    }
     const sup = supervisors.find((s) => s.id === supervisorId);
     const is24h = sup ? shiftInfo.isGroupOn24hDuty(sup.group) : false;
 
@@ -733,48 +737,83 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
             </div>
           </div>
 
-          {/* Middle: Attendance Status Selection Buttons (Freely Clickable) */}
-          <div className="flex items-center gap-2">
-            <button
-              id={`status-present-${sup.id}`}
-              type="button"
-              onClick={() => handleStatusChange(sup.id, 'present')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
-                isPresent
-                  ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-600 ring-offset-1'
-                  : 'bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 border border-slate-200'
-              }`}
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              <span>উপস্থিত</span>
-            </button>
+          {/* Middle: Attendance Status Selection Buttons */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                id={`status-present-${sup.id}`}
+                type="button"
+                onClick={() => handleStatusChange(sup.id, 'present')}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
+                  isPresent
+                    ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-600 ring-offset-1'
+                    : 'bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 border border-slate-200'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>উপস্থিত</span>
+              </button>
 
-            <button
-              id={`status-absent-${sup.id}`}
-              type="button"
-              onClick={() => handleStatusChange(sup.id, 'absent')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
-                isAbsent
-                  ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-600 ring-offset-1'
-                  : 'bg-slate-100 text-slate-700 hover:bg-rose-50 hover:text-rose-800 border border-slate-200'
-              }`}
-            >
-              <XCircle className="w-4 h-4" />
-              <span>অনুপস্থিত</span>
-            </button>
+              <button
+                id={`status-absent-${sup.id}`}
+                type="button"
+                onClick={() => handleStatusChange(sup.id, 'absent')}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
+                  isAbsent
+                    ? 'bg-rose-600 text-white shadow-xs ring-2 ring-rose-600 ring-offset-1'
+                    : 'bg-slate-100 text-slate-700 hover:bg-rose-50 hover:text-rose-800 border border-slate-200'
+                }`}
+              >
+                <XCircle className="w-4 h-4" />
+                <span>অনুপস্থিত</span>
+              </button>
 
-            <button
-              id={`status-leave-${sup.id}`}
-              type="button"
-              onClick={() => handleStatusChange(sup.id, 'leave')}
-              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-semibold text-sm transition-all cursor-pointer ${
-                isLeave
-                  ? 'bg-amber-600 text-white shadow-xs ring-2 ring-amber-600 ring-offset-1'
-                  : 'bg-slate-100 text-slate-700 hover:bg-amber-50 hover:text-amber-800 border border-slate-200'
-              }`}
-            >
-              <span>ছুটি</span>
-            </button>
+              {/* Leave Button: Controlled by Office Authority */}
+              {isOfficeAuthenticated || roleMode === 'office' ? (
+                <button
+                  id={`status-leave-${sup.id}`}
+                  type="button"
+                  onClick={() => handleStatusChange(sup.id, 'leave')}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg font-semibold text-xs sm:text-sm transition-all cursor-pointer ${
+                    isLeave
+                      ? 'bg-amber-600 text-white shadow-xs ring-2 ring-amber-600 ring-offset-1'
+                      : 'bg-slate-100 text-slate-700 hover:bg-amber-50 hover:text-amber-800 border border-slate-200'
+                  }`}
+                  title="অফিস কর্তৃক অনুমোদিত ছুটি (টাকা কাটবে না, সম্পূর্ণ বেতন ধরা হবে)"
+                >
+                  <Coffee className="w-3.5 h-3.5" />
+                  <span>ছুটি (বেতনযুক্ত)</span>
+                </button>
+              ) : isLeave ? (
+                <span
+                  className="flex items-center gap-1 px-3 py-2 rounded-lg font-bold text-xs bg-amber-100 text-amber-900 border border-amber-300"
+                  title="অফিস কর্তৃপক্ষ কর্তৃক ছুটি মঞ্জুরকৃত (বেতন কর্তনমুক্ত)"
+                >
+                  <Coffee className="w-3.5 h-3.5 text-amber-700" />
+                  <span>অফিস ছুটি (বেতনযুক্ত)</span>
+                </span>
+              ) : (
+                <button
+                  id={`status-leave-disabled-${sup.id}`}
+                  type="button"
+                  onClick={() => {
+                    alert('🔒 "ছুটি" কেবল অফিস কর্তৃপক্ষ মঞ্জুর করতে পারেন।\nসুপারভাইজার অনুপস্থিত থাকলে "অনুপস্থিত" সিলেক্ট করে মন্তব্যের ঘরে কারণ উল্লেখ করুন। অফিস কর্তৃপক্ষ কারণ যাচাই করে ছুটি বিবেচনা করবে এবং বেতন প্রদান করবে।');
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-2 rounded-lg font-medium text-xs bg-slate-100 text-slate-400 border border-dashed border-slate-300 hover:bg-slate-200/60 cursor-pointer"
+                  title="ছুটি দেওয়ার এখতিয়ার কেবল অফিস কর্তৃপক্ষের (ক্লিক করে জানুন)"
+                >
+                  <Lock className="w-3 h-3 text-slate-400" />
+                  <span>ছুটি (অফিস মঞ্জুরি)</span>
+                </button>
+              )}
+            </div>
+
+            {/* Micro Badge for Leave */}
+            {isLeave && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                বেতন কর্তন হবে না
+              </span>
+            )}
           </div>
 
           {/* Right: Note / Remarks Details */}
@@ -787,7 +826,10 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
                     অনুপস্থিতির কারণ (বাধ্যতামূলক *)
                   </span>
                 ) : isLeave ? (
-                  <span className="text-amber-700 font-semibold">ছুটির বিবরণ:</span>
+                  <span className="text-amber-800 font-bold flex items-center gap-1">
+                    <Coffee className="w-3 h-3 text-amber-700" />
+                    ছুটি বিবেচনার বিবরণ / রেফারেন্স:
+                  </span>
                 ) : (
                   <span className="text-slate-500">মন্তব্য (ঐচ্ছিক):</span>
                 )}
@@ -802,7 +844,7 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
                 isAbsent
                   ? 'অনুপস্থিতির কারণ লিখুন (বাধ্যতামূলক)...'
                   : isLeave
-                  ? 'ছুটির কারণ লিখুন...'
+                  ? 'ছুটির কারণ / অফিস রেফারেন্স লিখুন...'
                   : 'মন্তব্য (ঐচ্ছিক)...'
               }
               className={`w-full px-3 py-2 text-xs rounded-lg focus:outline-hidden transition-all bg-white ${
@@ -810,6 +852,8 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
                   ? 'border-2 border-rose-400 bg-rose-50/50 ring-2 ring-rose-200 placeholder:text-rose-400 font-medium'
                   : isAbsent
                   ? 'border border-rose-300 focus:ring-2 focus:ring-rose-500'
+                  : isLeave
+                  ? 'border border-amber-300 focus:ring-2 focus:ring-amber-500 bg-amber-50/30'
                   : 'border border-slate-300 focus:ring-2 focus:ring-cyan-600'
               }`}
             />
@@ -1121,6 +1165,12 @@ export const DailyAttendanceForm: React.FC<DailyAttendanceFormProps> = ({
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
               <span>উপস্থিত: {toBengaliNumber(presentCount)} জন</span>
             </div>
+            {leaveCount > 0 && (
+              <div className="flex items-center gap-2 bg-amber-50 text-amber-900 border border-amber-300 px-3 py-1.5 rounded-lg text-sm font-medium" title="অফিস কর্তৃক অনুমোদিত বিবেচনাধীন ছুটি (বেতন কর্তনমুক্ত)">
+                <Coffee className="w-4 h-4 text-amber-700" />
+                <span>ছুটি (বেতনযুক্ত): {toBengaliNumber(leaveCount)} জন</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 bg-rose-50 text-rose-800 border border-rose-200 px-3 py-1.5 rounded-lg text-sm font-medium">
               <XCircle className="w-4 h-4 text-rose-600" />
               <span>অনুপস্থিত: {toBengaliNumber(absentCount)} জন</span>

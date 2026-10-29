@@ -18,7 +18,7 @@ import {
   Building2,
   Sparkles,
 } from 'lucide-react';
-import { Supervisor, PendingAttendanceSubmission, DayAttendance } from '../types';
+import { Supervisor, PendingAttendanceSubmission, DayAttendance, AttendanceEntry } from '../types';
 import { formatBengaliDate, toBengaliNumber } from '../utils/bengaliUtils';
 
 interface OfficeApprovalPanelProps {
@@ -53,6 +53,9 @@ export const OfficeApprovalPanel: React.FC<OfficeApprovalPanelProps> = ({
     pendingSubmissions.length > 0 ? pendingSubmissions[0].id : null
   );
 
+  // Office record adjustments (e.g. converting absence to paid leave)
+  const [editedRecords, setEditedRecords] = useState<Record<string, Record<string, AttendanceEntry>>>({});
+
   // Change PIN modal state
   const [showChangePin, setShowChangePin] = useState(false);
   const [oldPin, setOldPin] = useState('');
@@ -63,6 +66,36 @@ export const OfficeApprovalPanel: React.FC<OfficeApprovalPanelProps> = ({
   // Rejection modal
   const [rejectionSubmissionId, setRejectionSubmissionId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+
+  const getSubmissionRecords = (sub: PendingAttendanceSubmission) => {
+    return editedRecords[sub.id] || sub.records;
+  };
+
+  const handleUpdateSupervisorStatusInReview = (
+    submissionId: string,
+    supervisorId: string,
+    newStatus: 'present' | 'absent' | 'leave'
+  ) => {
+    const targetSub = pendingSubmissions.find((s) => s.id === submissionId);
+    if (!targetSub) return;
+    setEditedRecords((prev) => {
+      const currentSubRecords = prev[submissionId] || { ...targetSub.records };
+      const currentEntry = currentSubRecords[supervisorId] || {
+        supervisorId,
+        status: 'present',
+      };
+      return {
+        ...prev,
+        [submissionId]: {
+          ...currentSubRecords,
+          [supervisorId]: {
+            ...currentEntry,
+            status: newStatus,
+          },
+        },
+      };
+    });
+  };
 
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -337,7 +370,20 @@ export const OfficeApprovalPanel: React.FC<OfficeApprovalPanelProps> = ({
                   <button
                     id={`btn-approve-${activeSubmission.id}`}
                     type="button"
-                    onClick={() => onApproveSubmission(activeSubmission.id)}
+                    onClick={() => {
+                      const finalRecords = getSubmissionRecords(activeSubmission);
+                      const updatedDayAttendance: DayAttendance = {
+                        date: activeSubmission.date,
+                        records: finalRecords,
+                        submittedAt: activeSubmission.submittedAt,
+                        submittedBy: activeSubmission.submittedBy,
+                        notes: activeSubmission.notes,
+                        approvalStatus: 'approved',
+                        approvedAt: new Date().toISOString(),
+                        approvedBy: 'অফিস কর্তৃপক্ষ (চট্টগ্রাম ড্রেজার মালিক সমিতি)',
+                      };
+                      onApproveSubmission(activeSubmission.id, updatedDayAttendance);
+                    }}
                     className="px-5 py-2 text-xs sm:text-sm font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
                   >
                     <CheckCircle2 className="w-4 h-4" />
@@ -346,10 +392,40 @@ export const OfficeApprovalPanel: React.FC<OfficeApprovalPanelProps> = ({
                 </div>
               </div>
 
+              {/* Office Leave Review Instruction Banner */}
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 rounded-xl p-3.5 text-xs text-amber-950 flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <strong>অফিস ছুটি মঞ্জুরির নীতিমালা:</strong> ফিল্ড সুপারভাইজাররা কেবল &apos;উপস্থিত&apos; বা &apos;অনুপস্থিত&apos; তথ্য জমা দিতে পারেন।
+                  অনুপস্থিতির কারণ যাচাই করে অফিস কর্তৃপক্ষ যদি তা যুক্তিযুক্ত মনে করেন, তবে নিচের তালিকায় সেই সুপারভাইজারের জন্য <strong className="text-amber-900 underline">&apos;ছুটি (বেতনযুক্ত)&apos;</strong> সিলেক্ট করুন। <strong>ছুটি হিসেবে সিলেক্ট করলে তার বেতন কাটা হবে না (সম্পূর্ণ বেতন প্রাপ্য হবে)।</strong>
+                </div>
+              </div>
+
+              {/* Quick status count pill bar */}
+              {(() => {
+                const curRecords = getSubmissionRecords(activeSubmission);
+                const pCount = supervisors.filter((s) => curRecords[s.id]?.status === 'present').length;
+                const lCount = supervisors.filter((s) => curRecords[s.id]?.status === 'leave').length;
+                const aCount = supervisors.filter((s) => curRecords[s.id]?.status === 'absent').length;
+                return (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 font-bold border border-emerald-300">
+                      উপস্থিত: {toBengaliNumber(pCount)} জন
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-950 font-bold border border-amber-300">
+                      ছুটি (বেতনযুক্ত): {toBengaliNumber(lCount)} জন
+                    </span>
+                    <span className="px-3 py-1 rounded-full bg-rose-100 text-rose-900 font-bold border border-rose-300">
+                      অনুপস্থিত (কর্তন হবে): {toBengaliNumber(aCount)} জন
+                    </span>
+                  </div>
+                );
+              })()}
+
               {/* Note if provided */}
               {activeSubmission.notes && (
-                <div className="bg-amber-50/70 border border-amber-200 p-3 rounded-xl text-xs text-amber-900">
-                  <strong>সুপারভাইজার কর্তৃক প্রেরিত নোট:</strong> {activeSubmission.notes}
+                <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs text-slate-800">
+                  <strong>সুপারভাইজার কর্তৃক প্রেরিত সাধারণ নোট:</strong> {activeSubmission.notes}
                 </div>
               )}
 
@@ -359,21 +435,31 @@ export const OfficeApprovalPanel: React.FC<OfficeApprovalPanelProps> = ({
                   <thead>
                     <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                       <th className="py-2.5 px-3">নাম ও গ্রুপ</th>
-                      <th className="py-2.5 px-3">ডিউটির স্থান (বন্দর ব্লক)</th>
-                      <th className="py-2.5 px-3 text-center">উপস্থিতি স্ট্যাটাস</th>
-                      <th className="py-2.5 px-3 text-center">ইন-টাইম</th>
-                      <th className="py-2.5 px-3">মন্তব্য</th>
+                      <th className="py-2.5 px-3">ডিউটির স্থান</th>
+                      <th className="py-2.5 px-3">অনুপস্থিতির কারণ / মন্তব্য</th>
+                      <th className="py-2.5 px-3 text-center">অফিস বিবেচনা ও স্ট্যাটাস নির্ধারণ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {supervisors.map((sup) => {
-                      const entry = activeSubmission.records[sup.id];
+                      const curRecords = getSubmissionRecords(activeSubmission);
+                      const entry = curRecords[sup.id] || { supervisorId: sup.id, status: 'present' };
                       const isPresent = entry?.status === 'present';
                       const isAbsent = entry?.status === 'absent';
+                      const isLeave = entry?.status === 'leave';
                       const dutyBlock = entry?.dutyBlock || sup.dutyBlock || 'বন্দর ব্লক';
 
                       return (
-                        <tr key={sup.id} className={isAbsent ? 'bg-rose-50/30' : 'hover:bg-slate-50'}>
+                        <tr
+                          key={sup.id}
+                          className={
+                            isAbsent
+                              ? 'bg-rose-50/40'
+                              : isLeave
+                              ? 'bg-amber-50/40'
+                              : 'hover:bg-slate-50'
+                          }
+                        >
                           <td className="py-2.5 px-3">
                             <div className="font-bold text-slate-900">{sup.name}</div>
                             <span className="text-[10px] text-slate-500 font-medium">{sup.group}</span>
@@ -381,26 +467,72 @@ export const OfficeApprovalPanel: React.FC<OfficeApprovalPanelProps> = ({
                           <td className="py-2.5 px-3 font-semibold text-cyan-950">
                             {dutyBlock}
                           </td>
-                          <td className="py-2.5 px-3 text-center">
-                            {isPresent ? (
-                              <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[11px]">
-                                উপস্থিত
+                          <td className="py-2.5 px-3">
+                            {entry?.remarks ? (
+                              <span className={isAbsent ? 'text-rose-700 font-medium' : 'text-slate-700'}>
+                                {entry.remarks}
                               </span>
                             ) : isAbsent ? (
-                              <span className="inline-block px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold text-[11px]">
-                                অনুপস্থিত
-                              </span>
+                              <span className="text-rose-500 italic">কারণ উল্লেখ নেই</span>
                             ) : (
-                              <span className="inline-block px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold text-[11px]">
-                                ছুটি
-                              </span>
+                              <span className="text-slate-400">-</span>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-center text-slate-600">
-                            {entry?.inTime || '-'}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-600 italic">
-                            {entry?.remarks || '-'}
+                          <td className="py-2.5 px-3">
+                            <div className="flex flex-wrap items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateSupervisorStatusInReview(activeSubmission.id, sup.id, 'present')
+                                }
+                                className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
+                                  isPresent
+                                    ? 'bg-emerald-600 text-white shadow-xs ring-1 ring-emerald-600'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 border border-slate-200'
+                                }`}
+                              >
+                                उपस्थित
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateSupervisorStatusInReview(activeSubmission.id, sup.id, 'absent')
+                                }
+                                className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
+                                  isAbsent
+                                    ? 'bg-rose-600 text-white shadow-xs ring-1 ring-rose-600'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-700 border border-slate-200'
+                                }`}
+                              >
+                                অনুপস্থিত
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateSupervisorStatusInReview(activeSubmission.id, sup.id, 'leave')
+                                }
+                                className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all flex items-center gap-1 ${
+                                  isLeave
+                                    ? 'bg-amber-600 text-white shadow-xs ring-2 ring-amber-400'
+                                    : 'bg-amber-50 text-amber-950 border border-amber-300 hover:bg-amber-100'
+                                }`}
+                                title="অফিস বিবেচনা করে ছুটি মঞ্জুর করতে পারেন (বেতন কাটা হবে না)"
+                              >
+                                <span>ছুটি (বেতনযুক্ত)</span>
+                              </button>
+                            </div>
+
+                            {/* Micro Indicator */}
+                            {isLeave && (
+                              <span className="text-[10px] text-emerald-800 font-bold block text-center mt-1">
+                                ✓ অফিস ছুটি: বেতন কর্তন হবে না
+                              </span>
+                            )}
+                            {isAbsent && (
+                              <span className="text-[10px] text-rose-700 font-semibold block text-center mt-1">
+                                অননুমোদিত: বেতন কাটা হবে
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );

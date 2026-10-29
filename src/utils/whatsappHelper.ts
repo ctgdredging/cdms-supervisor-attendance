@@ -12,6 +12,7 @@ import { getShiftInfoForDate } from './shiftCalculator';
 
 export interface SupervisorCumulativeStats {
   presentDays: number;
+  leaveDays: number; // অফিস অনুমোদিত ছুটি (বেতন কর্তনমুক্ত)
   regularAbsentDays: number;
   monday24hAbsentDays: number;
   effectiveAbsentDays: number;
@@ -54,6 +55,7 @@ export function computeMonthlyStatsForSupervisor(
     .sort();
 
   let presentDays = 0;
+  let leaveDays = 0;
   let regularAbsentDays = 0;
   let monday24hAbsentDays = 0;
   const absentDates: AbsentDateDetail[] = [];
@@ -67,7 +69,10 @@ export function computeMonthlyStatsForSupervisor(
     if (entry) {
       if (entry.status === 'present') {
         presentDays += 1;
-      } else if (entry.status === 'absent' || entry.status === 'leave') {
+      } else if (entry.status === 'leave') {
+        // অফিস কর্তৃক অনুমোদিত ছুটি: টাকা কাটবে না
+        leaveDays += 1;
+      } else if (entry.status === 'absent') {
         const parts = dateKey.split('-').map(Number);
         const dObj = new Date(parts[0], parts[1] - 1, parts[2]);
         const dayNum = parts[2];
@@ -114,6 +119,7 @@ export function computeMonthlyStatsForSupervisor(
 
   return {
     presentDays,
+    leaveDays,
     regularAbsentDays,
     monday24hAbsentDays,
     effectiveAbsentDays,
@@ -171,10 +177,13 @@ export function generateWhatsAppReportText(
 
   let todayPresent = 0;
   let todayAbsent = 0;
+  let todayLeave = 0;
   supervisors.forEach((s) => {
     const entry = records[s.id];
     if (entry?.status === 'absent') {
       todayAbsent++;
+    } else if (entry?.status === 'leave') {
+      todayLeave++;
     } else {
       todayPresent++;
     }
@@ -198,11 +207,12 @@ export function generateWhatsAppReportText(
     lines.push('');
     groupA.forEach((s, idx) => {
       const stats = computeMonthlyStatsForSupervisor(s, attendanceData, year, month);
+      const leaveNote = stats.leaveDays > 0 ? ` | অনুমোদিত ছুটি: *${toBengaliNumber(stats.leaveDays)} দিন (বেতনযুক্ত)*` : '';
 
       lines.push(`${toBengaliNumber(idx + 1)}. *${s.name}* [${s.designation}]`);
       lines.push(`   📱 মোবাইল: ${s.phone}`);
       lines.push(
-        `   ↳ উপস্থিত: *${toBengaliNumber(stats.presentDays)} দিন* | মোট অনুপস্থিতি: *${toBengaliNumber(stats.actualMissedDays)} দিন* (কার্যকর: ${toBengaliNumber(stats.effectiveAbsentDays)} দিন)`
+        `   ↳ উপস্থিত: *${toBengaliNumber(stats.presentDays)} দিন*${leaveNote} | মোট অনুপস্থিতি: *${toBengaliNumber(stats.actualMissedDays)} দিন* (কার্যকর: ${toBengaliNumber(stats.effectiveAbsentDays)} দিন)`
       );
 
       // List all absent dates if any
@@ -216,7 +226,7 @@ export function generateWhatsAppReportText(
           lines.push(`      • ${d.shortBengaliDate} — ${dutyTypeNote}${remarkText}`);
         });
       } else {
-        lines.push(`   ↳ ✅ *কোনো অনুপস্থিতি নেই (পুরো মাস ১০০% উপস্থিত)*`);
+        lines.push(`   ↳ ✅ *কোনো অননুমোদিত অনুপস্থিতি নেই*`);
       }
 
       // Deduction and Net Salary Breakdown
@@ -239,11 +249,12 @@ export function generateWhatsAppReportText(
     lines.push('');
     groupB.forEach((s, idx) => {
       const stats = computeMonthlyStatsForSupervisor(s, attendanceData, year, month);
+      const leaveNote = stats.leaveDays > 0 ? ` | অনুমোদিত ছুটি: *${toBengaliNumber(stats.leaveDays)} দিন (বেতনযুক্ত)*` : '';
 
       lines.push(`${toBengaliNumber(groupA.length + idx + 1)}. *${s.name}* [${s.designation}]`);
       lines.push(`   📱 মোবাইল: ${s.phone}`);
       lines.push(
-        `   ↳ উপস্থিত: *${toBengaliNumber(stats.presentDays)} দিন* | মোট অনুপস্থিতি: *${toBengaliNumber(stats.actualMissedDays)} দিন* (কার্যকর: ${toBengaliNumber(stats.effectiveAbsentDays)} দিন)`
+        `   ↳ উপস্থিত: *${toBengaliNumber(stats.presentDays)} দিন*${leaveNote} | মোট অনুপস্থিতি: *${toBengaliNumber(stats.actualMissedDays)} দিন* (কার্যকর: ${toBengaliNumber(stats.effectiveAbsentDays)} দিন)`
       );
 
       // List all absent dates if any
@@ -380,13 +391,22 @@ export function generateWhatsAppReportText(
   lines.push(`⚓ *শুধুমাত্র আজকের দৈনিক হাজিরা রিপোর্ট*`);
   lines.push(`📅 *তারিখ:* ${formatBengaliDate(selectedDate)} (${shiftInfo.dayName})`);
   lines.push('──────────────────────────────────────');
-  lines.push(`📊 সারসংক্ষেপ: উপস্থিত: ${toBengaliNumber(todayPresent)} জন | অনুপস্থিত: ${toBengaliNumber(todayAbsent)} জন`);
+  lines.push(
+    `📊 সারসংক্ষেপ: উপস্থিত: ${toBengaliNumber(todayPresent)} জন${
+      todayLeave > 0 ? ` | ছুটি (বেতনযুক্ত): ${toBengaliNumber(todayLeave)} জন` : ''
+    } | অনুপস্থিত: ${toBengaliNumber(todayAbsent)} জন`
+  );
   lines.push('──────────────────────────────────────');
 
   lines.push(`🔹 *গ্রুপ-এ:*`);
   groupA.forEach((s, idx) => {
     const entry = records[s.id];
-    const status = entry?.status === 'absent' ? '❌ অনুপস্থিত' : '✅ উপস্থিত';
+    const status =
+      entry?.status === 'absent'
+        ? `❌ অনুপস্থিত${entry?.remarks ? ` [কারণ: ${entry.remarks}]` : ''}`
+        : entry?.status === 'leave'
+        ? '🏖️ ছুটি (অফিস অনুমোদিত - বেতন কর্তনমুক্ত)'
+        : '✅ উপস্থিত';
     lines.push(`${toBengaliNumber(idx + 1)}. ${s.name} (${s.phone}) ➔ ${status}`);
   });
 
@@ -394,7 +414,12 @@ export function generateWhatsAppReportText(
   lines.push(`🔸 *গ্রুপ-বি:*`);
   groupB.forEach((s, idx) => {
     const entry = records[s.id];
-    const status = entry?.status === 'absent' ? '❌ অনুপস্থিত' : '✅ উপস্থিত';
+    const status =
+      entry?.status === 'absent'
+        ? `❌ অনুপস্থিত${entry?.remarks ? ` [কারণ: ${entry.remarks}]` : ''}`
+        : entry?.status === 'leave'
+        ? '🏖️ ছুটি (অফিস অনুমোদিত - বেতন কর্তনমুক্ত)'
+        : '✅ উপস্থিত';
     lines.push(`${toBengaliNumber(groupA.length + idx + 1)}. ${s.name} (${s.phone}) ➔ ${status}`);
   });
 

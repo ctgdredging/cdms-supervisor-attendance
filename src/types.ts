@@ -62,15 +62,16 @@ export interface MonthlySalaryReport {
   totalDaysInMonth: number;
   daysRecorded: number;
   presentDays: number;
-  regularAbsentDays: number; // সাধারণ অনুপস্থিতি (দিন)
-  monday24hAbsentDays: number; // সোমবারের ২৪ ঘণ্টা ডিউটিতে অনুপস্থিতি (দিন)
+  leaveDays: number; // অফিস কর্তৃক অনুমোদিত/বিবেচিত ছুটি (বেতন কর্তনমুক্ত, সম্পূর্ণ বেতন প্রাপ্য)
+  regularAbsentDays: number; // সাধারণ অননুমোদিত অনুপস্থিতি (দিন)
+  monday24hAbsentDays: number; // সোমবারের ২৪ ঘণ্টা ডিউটিতে অননুমোদিত অনুপস্থিতি (দিন)
   effectiveAbsentDays: number; // regularAbsentDays + (monday24hAbsentDays * 2)
-  actualMissedDays: number; // মোট অনুপস্থিত দিনের প্রকৃত সংখ্যা
-  allowedLeaveDays: number; // ১ দিন অনুমোদিত ফ্রি ছুটি
+  actualMissedDays: number; // মোট অননুমোদিত অনুপস্থিত দিনের প্রকৃত সংখ্যা
+  allowedLeaveDays: number; // ১ দিন ফ্রি ক্যাজুয়াল ছুটি
   deductibleDays: number; // max(0, effectiveAbsentDays - allowedLeaveDays)
   deductionRate: number; // 666.67
   totalDeduction: number; // deductibleDays * 666.67
   netSalary: number; // baseSalary - totalDeduction (অবশিষ্ট বেতন)
-  absentDates?: AbsentDateDetail[]; // অনুপস্থিত দিনসমূহের নির্দিষ্ট তারিখ ও বিবরণ
+  absentDates?: AbsentDateDetail[]; // অননুমোদিত অনুপস্থিত দিনসমূহের নির্দিষ্ট তারিখ ও বিবরণ
 }
 

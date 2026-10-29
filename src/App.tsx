@@ -387,17 +387,18 @@ export default function App() {
   };
 
   // 2. Office Authority approves submission -> commits to attendanceData & Firestore Cloud!
-  const handleApproveSubmission = async (submissionId: string) => {
+  const handleApproveSubmission = async (submissionId: string, updatedRecord?: DayAttendance) => {
     const target = pendingSubmissions.find((s) => s.id === submissionId);
-    if (!target) return;
+    if (!target && !updatedRecord) return;
 
     setIsSyncing(true);
-    const approvedRecord: DayAttendance = {
-      date: target.date,
-      records: target.records,
-      submittedAt: target.submittedAt,
-      submittedBy: target.submittedBy,
-      notes: target.notes,
+    const targetDate = updatedRecord?.date || target!.date;
+    const approvedRecord: DayAttendance = updatedRecord || {
+      date: target!.date,
+      records: target!.records,
+      submittedAt: target!.submittedAt,
+      submittedBy: target!.submittedBy,
+      notes: target!.notes,
       approvalStatus: 'approved',
       approvedAt: new Date().toISOString(),
       approvedBy: 'অফিস কর্তৃপক্ষ (চট্টগ্রাম ড্রেজার মালিক সমিতি)',
@@ -406,12 +407,12 @@ export default function App() {
     // Commit to local attendance state immediately
     setAttendanceData((prev) => ({
       ...prev,
-      [target.date]: approvedRecord,
+      [targetDate]: approvedRecord,
     }));
     setPendingSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
 
     try {
-      await saveAttendanceToCloud(target.date, approvedRecord);
+      await saveAttendanceToCloud(targetDate, approvedRecord);
       await removePendingSubmissionFromCloud(submissionId);
       setIsCloudConnected(true);
     } catch (err) {
@@ -420,7 +421,6 @@ export default function App() {
       setIsSyncing(false);
     }
 
-    alert(`সফল! ${formatBengaliDate(target.date)} তারিখের হাজিরা ক্লাউড ডেটাবেজে অনুমোদিত হয়েছে। মোবাইল ও পিসির সব ব্রাউজারে সাথে সাথে লাইভ আপডেট হয়ে গেছে।`);
   };
 
   // 3. Office Authority rejects submission

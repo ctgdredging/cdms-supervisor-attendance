@@ -115,11 +115,17 @@ export const SalarySlipModal: React.FC<SalarySlipModalProps> = ({
             <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
               হাজিরা ও ছুটির বিবরণী
             </h2>
-            <div className="grid grid-cols-4 gap-2 text-center text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
               <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
                 <span className="text-slate-600 block text-[11px]">উপস্থিত দিন</span>
                 <span className="text-base font-bold text-emerald-800">
                   {toBengaliNumber(report.presentDays)} দিন
+                </span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-300">
+                <span className="text-amber-900 block text-[11px] font-semibold">ছুটি (বেতনযুক্ত)</span>
+                <span className="text-base font-bold text-amber-900">
+                  {toBengaliNumber(report.leaveDays || 0)} দিন
                 </span>
               </div>
               <div className="p-2.5 rounded-lg bg-slate-100 border border-slate-200">
@@ -128,9 +134,9 @@ export const SalarySlipModal: React.FC<SalarySlipModalProps> = ({
                   {toBengaliNumber(report.regularAbsentDays)} দিন
                 </span>
               </div>
-              <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200">
-                <span className="text-amber-900 block text-[11px] font-semibold">সোম ২৪ঘণ্টা অনুপস্থিতি</span>
-                <span className="text-base font-extrabold text-amber-900">
+              <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200">
+                <span className="text-rose-900 block text-[11px] font-semibold">সোম ২৪ঘণ্টা অনুপস্থিতি</span>
+                <span className="text-base font-extrabold text-rose-900">
                   {toBengaliNumber(report.monday24hAbsentDays)} দিন
                 </span>
               </div>
@@ -141,6 +147,12 @@ export const SalarySlipModal: React.FC<SalarySlipModalProps> = ({
                 </span>
               </div>
             </div>
+            {report.leaveDays > 0 && (
+              <div className="mt-2.5 p-2 bg-emerald-50 border border-emerald-300 rounded-lg text-[11px] text-emerald-900 font-semibold flex items-center gap-1.5">
+                <span>✓</span>
+                <span>অফিস কর্তৃপক্ষ কর্তৃক {toBengaliNumber(report.leaveDays)} দিন বিবেচনাধীন ছুটি হিসেবে অনুমোদন করা হয়েছে (কোনো বেতন কাটা হয়নি, সম্পূর্ণ বেতন প্রাপ্য)।</span>
+              </div>
+            )}
           </div>
 
           {/* Absent Dates List if any */}

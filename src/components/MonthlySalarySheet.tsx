@@ -72,6 +72,7 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
   const totalDeductions = filteredReport.reduce((acc, curr) => acc + curr.totalDeduction, 0);
   const totalNetPayable = filteredReport.reduce((acc, curr) => acc + curr.netSalary, 0);
   const totalPresentCount = filteredReport.reduce((acc, curr) => acc + curr.presentDays, 0);
+  const totalLeaveCount = filteredReport.reduce((acc, curr) => acc + (curr.leaveDays || 0), 0);
   const totalRegularAbsentCount = filteredReport.reduce((acc, curr) => acc + curr.regularAbsentDays, 0);
   const totalMonday24hAbsentCount = filteredReport.reduce((acc, curr) => acc + curr.monday24hAbsentDays, 0);
   const totalEffectiveAbsentCount = filteredReport.reduce((acc, curr) => acc + curr.effectiveAbsentDays, 0);
@@ -85,6 +86,7 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
       'পদবী',
       'মূল বেতন (টাকা)',
       'উপস্থিত দিন',
+      'অনুমোদিত ছুটি (বেতনযুক্ত দিন)',
       'সাধারণ অনুপস্থিতি (দিন)',
       'সোমবারের ২৪ ঘণ্টা অনুপস্থিতি (দিন)',
       'মোট কার্যকর অনুপস্থিতি (দিন)',
@@ -102,6 +104,7 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
       r.supervisor.designation,
       r.supervisor.baseSalary,
       r.presentDays,
+      r.leaveDays || 0,
       r.regularAbsentDays,
       r.monday24hAbsentDays,
       r.effectiveAbsentDays,
@@ -338,19 +341,21 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
 
         <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs">
           <div className="flex items-center justify-between text-slate-700 text-xs font-semibold mb-1">
-            <span>মোট উপস্থিতি ও অনুপস্থিতি</span>
+            <span>মোট উপস্থিতি ও ছুটি</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="flex items-baseline gap-2">
             <p className="text-lg sm:text-xl font-bold text-emerald-700">
               {toBengaliNumber(totalPresentCount)} দিন
             </p>
-            <span className="text-xs text-rose-700 font-semibold">
-              (সাধারণ: {toBengaliNumber(totalRegularAbsentCount)}, সোম ২৪ঘণ্টা: {toBengaliNumber(totalMonday24hAbsentCount)})
-            </span>
+            {totalLeaveCount > 0 && (
+              <span className="text-xs text-amber-900 font-bold bg-amber-100 px-1.5 py-0.5 rounded">
+                + ছুটি: {toBengaliNumber(totalLeaveCount)} দিন
+              </span>
+            )}
           </div>
           <span className="text-[11px] text-slate-700">
-            মোট কার্যকর অনুপস্থিতি: {toBengaliNumber(totalEffectiveAbsentCount)} দিন
+            অনুপস্থিতি: {toBengaliNumber(totalRegularAbsentCount + totalMonday24hAbsentCount)} দিন (কার্যকর: {toBengaliNumber(totalEffectiveAbsentCount)} দিন)
           </span>
         </div>
 
@@ -391,8 +396,11 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
                 <th className="py-3 px-3.5">সুপারভাইজার ও পদবী</th>
                 <th className="py-3 px-2 text-center">গ্রুপ</th>
                 <th className="py-3 px-3 text-right">মূল বেতন</th>
-                <th className="py-3 px-2.5 text-center">উপস্থিত দিন</th>
-                <th className="py-3 px-2.5 text-center">সাধারণ অনুপস্থিতি</th>
+                <th className="py-3 px-2 text-center">উপস্থিত দিন</th>
+                <th className="py-3 px-2 text-center bg-amber-50/70 text-amber-950 font-bold">
+                  ছুটি (বেতনযুক্ত)
+                </th>
+                <th className="py-3 px-2 text-center">সাধারণ অনুপস্থিতি</th>
                 <th className="py-3 px-2.5 text-center bg-amber-50/60 text-amber-950">
                   সোম ২৪ঘণ্টা অনুপস্থিতি
                 </th>
@@ -415,7 +423,7 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
             <tbody className="divide-y divide-slate-200 text-slate-800">
               {filteredReport.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-8 text-center text-slate-600">
+                  <td colSpan={14} className="py-8 text-center text-slate-600">
                     কোনো সুপারভাইজারের রেকর্ড পাওয়া যায়নি।
                   </td>
                 </tr>
@@ -450,12 +458,24 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
                       <td className="py-3 px-3 text-right font-medium text-slate-700">
                         {formatTaka(row.supervisor.baseSalary)}
                       </td>
-                      <td className="py-3 px-2.5 text-center">
+                      <td className="py-3 px-2 text-center">
                         <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs">
                           {toBengaliNumber(row.presentDays)}
                         </span>
                       </td>
-                      <td className="py-3 px-2.5 text-center">
+                      <td className="py-3 px-2 text-center bg-amber-50/40">
+                        {row.leaveDays > 0 ? (
+                          <span
+                            className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-950 font-bold text-xs"
+                            title="অফিস কর্তৃক অনুমোদিত ছুটি (টাকা কাটবে না)"
+                          >
+                            +{toBengaliNumber(row.leaveDays)} দিন
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">০</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-2 text-center">
                         <span
                           className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full font-bold text-xs ${
                             row.regularAbsentDays > 0
@@ -515,10 +535,13 @@ export const MonthlySalarySheet: React.FC<MonthlySalarySheetProps> = ({
                 <td className="py-3.5 px-3 text-right">
                   {formatTaka(totalBaseSalary)}
                 </td>
-                <td className="py-3.5 px-2.5 text-center">
+                <td className="py-3.5 px-2 text-center">
                   {toBengaliNumber(totalPresentCount)} দিন
                 </td>
-                <td className="py-3.5 px-2.5 text-center text-slate-700">
+                <td className="py-3.5 px-2 text-center text-amber-950 font-bold">
+                  {toBengaliNumber(totalLeaveCount)} দিন
+                </td>
+                <td className="py-3.5 px-2 text-center text-slate-700">
                   {toBengaliNumber(totalRegularAbsentCount)} দিন
                 </td>
                 <td className="py-3.5 px-2.5 text-center text-rose-700">
